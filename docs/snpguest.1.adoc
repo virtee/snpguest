@@ -1,0 +1,33 @@
+snpguest(1)
+===========
+
+NAME
+----
+snpguest - Command line tool for managing the AMD SEV-SNP environment.
+
+
+SYNOPSIS
+--------
+*snpguest* [GLOBAL_OPTIONS] [_COMMAND_] [_COMMAND_ARGS_] +
+*snpguest* [_-h, --help_] +
+
+
+DESCRIPTION
+-----------
+snpguest is a CLI utility for navigating and interacting with the AMD SEV-SNP
+guest firmware device of a host system.
+
+
+GLOBAL OPTIONS
+--------------
+*-q, --quiet*:: Don't print any output to the console.
+
+
+COMMANDS
+--------
+
+
+REPORTING BUGS
+--------------
+
+Please report all bugs to <https://github.com/virtee/snpguest/issues>
