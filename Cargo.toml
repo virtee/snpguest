@@ -1,0 +1,16 @@
+[package]
+name = "snpguest"
+version = "0.1.0"
+authors = ["The VirTEE Project Developers"]
+edition = "2021"
+license = "Apache-2.0"
+homepage = "https://github.com/virtee/snphost"
+repository = "https://github.com/virtee/snphost"
+description = "Navigation utility for AMD SEV-SNP guest environment"
+readme = "README"
+keywords = ["amd", "sev", "sev-snp", "snp"]
+exclude = [ ".gitignore", ".github/*" ]
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
