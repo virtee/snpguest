@@ -3,7 +3,7 @@ snpguest(1)
 
 NAME
 ----
-snpguest - Command line tool for managing the AMD SEV-SNP environment.
+snpguest - Command line tool for managing the AMD SEV-SNP Guest environment.
 
 
 SYNOPSIS
@@ -25,7 +25,72 @@ GLOBAL OPTIONS
 
 COMMANDS
 --------
+*snpguest request report*::
+    usage: snpguest request report --message_version $MESSAGE_VERSION_NUMBER --request_file $REQUEST_FILE_PATH --vmpl $VMPL --att_report_path $ATTESTATION_REPORT_PATH
+    
+    Requests an attestation report from the host. Will write the contents of the attestation report in binary format into the specified report path. 
+    User needs to pass 64 bytes of data in any file format into request_file in order to be able to request the attestation report.
+    Attestation report path defaults to current directory ("./attestation_report.bin").
 
+    options:
+    -h, --help  show a help message
+
+*snpguest request extended_report*::
+    usage: snpguest request extended-report --message_version $MESSAGE_VERSION_NUMBER --request_file $REQUEST_FILE_PATH --vmpl $VMPL --att_report_path $ATTESTATION_REPORT_PATH --ark_path $ARK_PATH --ask_path $ASK_PATH --vcek_path $vcek_path
+
+    Requests an extended attestation report from the host. Will write the contents of the attestation report in binary format into specified report path. 
+    User needs to pass 64 bytes of data in any file format into request_file in order to be able to request the attestation report.
+    Will cycle through the host set certificates and write their contents into the specified paths.
+    Attestation report path defaults to current directory ("./attestation_report.bin"). 
+    Cert paths default to "./certs" directory, if directory is missing it will be created.
+
+    options:
+    -h, --help show a help message
+
+*snpguest request certificate-chain*::
+    usage: snpguest request certificate-chain --processor_type $PROCESSOR_TYPE --ark_path $ARK_PATH  --ask_path $ASK_PATH
+
+    Requests the CA certificate chain from the KDS by creating the URL.
+    The user should specify their host processory type using the processory_type flag, it will default to "Milan".
+    The certificates (ARK and ARK) will be written into the provided directory.
+    Cert paths default to "./certs" directory, if directory is missing it will be created, and both certificates will be written in .pem formats.
+
+    options:
+    -h, --help show a help message
+
+*snpguest request vcek*::
+    usage: snpguest request vcek --processor_type $PROCESSOR_TYPE --vcek_path $VCEK_PATH  --att_report_path $ATTESTATION_REPORT_PATH
+
+    Requests the vcek certificate from the KDS.
+    The user should specify their host processory type using the processory_type flag, it will default to "Milan".
+    The user needs to provide a path to an attestation report in order to request the vcek.
+    If no path is provided for attestation report, the program will look for an attestation report in the local directory by default ("./attestation_report.bin").
+    The certificate will be written into the provided directory.
+    Cert path defaults to "./certs" directory, if directory is missing it will be created, and the vcek will be written in .der format.
+
+    options:
+    -h, --help show a help message
+
+*snpguest guest verify-root-of-trust*::
+    usage: snpguest verify-root-of-trust --ark_path $ARK_PATH --ask_path $ASK_PATH --vcek_path $vcek_path
+
+    Verifies that the provided certificate chain has been properly signed by each certificate.
+    The user needs to provide a path to each of the certificates that need to be verified.
+    If no path is provided for the certificates, the program will look for them in the local cert directory ("./certs/)
+    Error will be raised if any of the certificates fails verification.
+
+    options:
+    -h, --help show a help message
+
+*snpguest guest display-attestation*::
+    usage: snpguest display-attestation --att_report_path $ATTESTATION_REPORT_PATH
+
+    Prints attestation report into terminal.
+    The user needs to provide a path to the attestation report they would like to display.
+    If no path is provided for the attestation-report, the program will look for them in the local directory ("./attestation_report.bin)
+
+    options:
+    -h, --help show a help message
 
 REPORTING BUGS
 --------------
