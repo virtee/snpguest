@@ -31,6 +31,7 @@ enum SnpGuestCmd {
         about = "Request a report or extended report from the PSP. Can also request the certificate chain and VCEK from the KDS."
     )]
     Request(RequestCmd),
+    
     #[structopt(about = "Different guest tools to manage your secure guest.")]
     Guest(GuestCmd),
 }
@@ -43,7 +44,7 @@ fn main() -> Result<()> {
 
     let status = match snpguest.cmd {
         SnpGuestCmd::Request(subcmd) => request::cmd(subcmd),
-        SnpGuestCmd::Guest(subcmd) => guest::cmd(subcmd),
+        SnpGuestCmd::Guest(subcmd) => guest::cmd(subcmd,snpguest.quiet),
     };
 
     // Show caught error if quiet is not enabled.
