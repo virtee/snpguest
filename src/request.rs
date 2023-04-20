@@ -138,7 +138,7 @@ mod extended_report {
             default_value = "./attestation_report.bin",
             help = "File to write the attestation report to."
         )]
-        pub report_file: PathBuf,
+        pub att_report_path: PathBuf,
 
         #[structopt(
             long,
@@ -186,7 +186,7 @@ mod extended_report {
             .context("Failed to get extended report.")?;
 
         // Write attestation report into file
-        let mut attestation_file = File::create(args.report_file.clone())
+        let mut attestation_file = File::create(args.att_report_path.clone())
             .context("Failed to create Attestation Report File")?;
         bincode::serialize_into(&mut attestation_file, &att_report)
             .context("Could not serialize attestation report into file.")?;
