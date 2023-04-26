@@ -76,8 +76,32 @@ COMMANDS
 
     Verifies that the provided certificate chain has been properly signed by each certificate.
     The user needs to provide a path to each of the certificates that need to be verified.
-    If no path is provided for the certificates, the program will look for them in the local cert directory ("./certs/)
+    If no path is provided for the certificates, the program will look for them in the local cert directory ("./certs/")
     Error will be raised if any of the certificates fails verification.
+
+    options:
+    -h, --help show a help message
+
+*snpguest guest verify-tcb*::
+    usage: snpguest verify-tcb --vcek_path $vcek_path --att_report_path $ATTESTATION_REPORT_PATH
+
+    Verifies the trusted compute base using the provided attestation report and VCEK certificate
+    The user needs to provide a path to the attestation report and to the VCEK certificate.
+    If no path is provided for the attestation report, the program will look for it in the local directory ("./attestation_report.bin").
+    If no path is provided for the certificate, the program will look for it in the local cert directory ("./certs/").
+    Error will be raised if there is any mismatch between the report TCB and the VCEK TCB contents.
+
+    options:
+    -h, --help show a help message
+
+*snpguest guest verify-attestation-signature*::
+    usage: snpguest verify-attestation-signature --vcek_path $vcek_path --att_report_path $ATTESTATION_REPORT_PATH
+
+    Verifies that the provided attestation report was actually signed by the VCEK.
+    The user needs to provide a path to the attestation report and to the VCEK certificate.
+    If no path is provided for the attestation report, the program will look for it in the local directory ("./attestation_report.bin").
+    If no path is provided for the certificate, the program will look for it in the local cert directory ("./certs/").
+    Error will be raised if the signature in the attestation report does not match the VCEK public key.
 
     options:
     -h, --help show a help message
