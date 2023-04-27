@@ -5,7 +5,7 @@ use std::path::PathBuf;
 use std::fs;
 use std::io::ErrorKind;
 
-use sev::firmware::guest::types::AttestationReport;
+use sev::firmware::guest::AttestationReport;
 
 use openssl::{
     ecdsa::EcdsaSig,
