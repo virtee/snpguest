@@ -1,22 +1,47 @@
 use super::*;
 
+use std::{
+    fs, 
+    fs::File,
+    io,
+    io::{Read, Write, BufWriter}, 
+    path::{Path, PathBuf},
+    str::FromStr
+};
+
 use bincode;
-use std::fs;
-use std::fs::File;
-use std::io::Read;
-use std::io::Write;
-use std::path::{Path,PathBuf};
 use reqwest::blocking::{get,Response};
+use rand::{RngCore, thread_rng};
 
 use sev::firmware::{
-    guest::{
-        types::SnpReportReq,
-        Firmware,
-    },
-    host::types::SnpCertType,
+    guest::{Firmware,AttestationReport},
+    host::CertType
 };
 
 use certs::identify_cert;
+
+// Create 64 random bytes of data
+pub fn create_random_request() -> [u8; 64] {
+    let mut data = [0u8; 64];
+    thread_rng().fill_bytes(&mut data);
+    return data
+}
+
+// Write data into given file
+pub fn write_hex<W: Write>(file: &mut BufWriter<W>, data: &[u8]) -> Result<()> {
+    let mut line_counter = 0;
+    for val in data {
+        // Make it blocks for easier read
+        if line_counter.eq(&16){
+            write!(file,"\n").context("Failed to write data to file")?;
+            line_counter = 0;
+        }
+        // Write byte into file
+        write!(file, "{:02x} ", val).context("Failed to write data to file")?;
+        line_counter += 1;
+    }
+    Ok(())
+}
 
 // Request command structure
 #[derive(StructOpt)]
@@ -25,12 +50,7 @@ pub enum RequestCmd {
     #[structopt(about = "Request an attestation report from the PSP.")]
     Report(report::Args),
 
-    #[structopt(
-        about = "Request an extended attestation report from the PSP. (Attestation Report + certificate chain)"
-    )]
-    ExtendedReport(extended_report::Args),
-
-    #[structopt(about = "Request the certificate chain from the KDS.")]
+    #[structopt(about = "Request the certificate chain (ARK & ASK) from the KDS.")]
     CertificateChain(cert_chain::Args),
 
     #[structopt(about = "Request the VCEK from the KDS.")]
@@ -41,226 +61,258 @@ pub enum RequestCmd {
 pub fn cmd(cmd: RequestCmd) -> Result<()> {
     match cmd {
         RequestCmd::Report(args) => report::get_report(args),
-        RequestCmd::ExtendedReport(args) => extended_report::get_extended_report(args),
         RequestCmd::CertificateChain(args) => cert_chain::request_cert_chain(args),
         RequestCmd::VCEK(args) => vcek::request_vcek(args),
     }
-}
+} 
 
-// Module to request a regular report
+// Module to request an attestation report
 mod report {
 
-    use super::*;
+use super::*;
 
     #[derive(StructOpt)]
     pub struct Args {
         #[structopt(
-            long,
-            help = "(Optional) Used for the SnpGuestRequest, specifies the message version number defaults to 1."
+            long = "extended",
+            short,
+            help = "Request an extended report instead of the regular report"
+        )]
+        pub extended_report: bool,
+        
+        #[structopt(
+            long = "message-version",
+            short,
+            help = "Used for the SnpGuestRequest, specifies the message version number. Defaults to 1"
         )]
         pub message_version: Option<u8>,
 
-        #[structopt(long, help = "SNP Report data to pass in. Must be 64 bytes in any format.")]
-        pub request_file: PathBuf,
+        #[structopt(
+            long = "vmpl",
+            short,
+            help = "VMPL level the Guest is running on. Defaults to 1"
+        )]
+        pub vmpl: Option<u32>,
 
         #[structopt(
-            long,
-            default_value = "0",
-            help = "VMPL level the Guest is running on."
+            long = "random",
+            short,
+            help = "Generate a random request file for the attestation report. Defaults to ./random-request-file.txt"
         )]
-        pub vmpl: u32,
+        pub random: bool,
 
         #[structopt(
-            long,
-            default_value = "./attestation_report.bin",
-            help = "File to write the attestation report to."
+            long = "request",
+            help = "Path pointing to were the request-file location. If provided with random flag, then a random request file will be generated at that location"
         )]
-        pub att_report_path: PathBuf,
+        pub request_file: Option<PathBuf>,
+
+        #[structopt(
+            long = "attestation-report",
+            short,
+            help = "File to write the attestation report to. Defaults to ./attestation_report.bin"
+        )]
+        pub att_report_path: Option<PathBuf>,
+
+        #[structopt(
+            long = "ark",
+            help = "File to write the AMD Root Key (ARK) to. Defaults to ./certs/ark.pem or ./certs/ark.der"
+        )]
+        pub ark_path: Option<PathBuf>,
+
+        #[structopt(
+            long = "ask",
+            help = "File to write the AMD Signing Key (ASK) to. Defaults to ./certs/ask.pem or ./certs/ask.der"
+        )]
+        pub ask_path: Option<PathBuf>,
+
+        #[structopt(
+            long = "vcek",
+            help = "File to write the he Versioned Chip Endorsement Key (VCEK) to. Defaults to ./certs/vcek.pem or ./certs/vcek.der"
+        )]
+        pub vcek_path: Option<PathBuf>,
     }
 
     // Request report function
     pub fn get_report(args: Args) -> Result<()> {
-        
-        // Open SEV firmware device
+
         let mut sev_fw: Firmware =
             Firmware::open().context("failed to open SEV firmware device.")?;
 
-        // Read the report request file
-        let mut request_file = File::open(args.request_file.clone())
-            .context("Could not open the report request file.")?;
-        let mut request_data: [u8; 64] = [0; 64];
-        request_file
-            .read(&mut request_data)
-            .context("Could not read report request file.")?;
-
-        // Create an SNP Report Request structure
-        let snp_data: SnpReportReq = SnpReportReq::new(Some(request_data), args.vmpl);
-
-        // Request attestation rerport
-        let att_report = sev_fw
-            .snp_get_report(args.message_version, snp_data)
-            .context("Failed to get report.")?;
-
-        // Write attestation report into a bin file
-        let mut attestation_file = File::create(args.att_report_path.clone())
-            .context("Failed to create Attestation Report File")?;
-        bincode::serialize_into(&mut attestation_file, &att_report)
-            .context("Could not serialize attestation report into file.")?;
-
-        Ok(())
-    }
-}
-
-// Module to request extended-report
-mod extended_report {
-    use super::*;
-
-    #[derive(StructOpt)]
-    pub struct Args {
-        #[structopt(
-            long,
-            help = "(Optional) Used for the SnpGuestRequest, specifies the message version number defaults to 1."
-        )]
-        pub message_version: Option<u8>,
-
-        #[structopt(long, help = "SNP Report data to pass in. Must be 64 bytes in any format.")]
-        pub request_file: PathBuf,
-
-        #[structopt(
-            long,
-            default_value = "0",
-            help = "VMPL level the Guest is running on."
-        )]
-        pub vmpl: u32,
-
-        #[structopt(
-            long,
-            default_value = "./attestation_report.bin",
-            help = "File to write the attestation report to."
-        )]
-        pub att_report_path: PathBuf,
-
-        #[structopt(
-            long,
-            default_value = "",
-            help = "File to write the AMD Root Key (ARK) to. Will default to ./certs/ark.pem or ./certs/ark.der"
-        )]
-        pub ark_path: PathBuf,
-
-        #[structopt(
-            long,
-            default_value = "",
-            help = "File to write the AMD Signing Key (ASK) to. Will default to ./certs/ask.pem or ./certs/ask.der"
-        )]
-        pub ask_path: PathBuf,
-
-        #[structopt(
-            long,
-            default_value = "",
-            help = "File to write the he Versioned Chip Endorsement Key (VCEK) to. Will default to ./certs/vcek.pem or ./certs/vcek.der"
-        )]
-        pub vcek_path: PathBuf,
-    }
-
-    //Request extended report function
-    pub fn get_extended_report(args: Args) -> Result<()> {
         
-        // Open sev firmware device
-        let mut sev_fw: Firmware =
-            Firmware::open().context("failed to open SEV firmware device.")?;
-
-        // Read request file contents
-        let mut request_file = File::open(args.request_file.clone())
-            .context("Could not open the report request file.")?;
-        let mut request_data: [u8; 64] = [0; 64];
-        request_file
-            .read(&mut request_data)
-            .context("Could not read report request file.")?;
-        
-        // Create snp request structure
-        let snp_data: SnpReportReq = SnpReportReq::new(Some(request_data), args.vmpl);
-
-        // Request extended report
-        let (att_report, certificates) = sev_fw
-            .snp_get_ext_report(args.message_version, snp_data)
-            .context("Failed to get extended report.")?;
-
-        // Write attestation report into file
-        let mut attestation_file = File::create(args.att_report_path.clone())
-            .context("Failed to create Attestation Report File")?;
-        bincode::serialize_into(&mut attestation_file, &att_report)
-            .context("Could not serialize attestation report into file.")?;
-
-        // Check for certificates
-        if certificates.is_empty() {
-            panic!("The certicate chain was not loaded by the host")
-        }
-        
-        // If default path is being used, make sure certs folder is created if missing
-        if args.ark_path.as_os_str().is_empty() | args.ask_path.as_os_str().is_empty() | args.vcek_path.as_os_str().is_empty() {
-            if !Path::new("./certs").is_dir() {
-                fs::create_dir("./certs").context("Could not create certs folder")?;
-            }
-        }
-
-        // Cycle throgh certs and write them into the passed file path.
-        // If default path is being used, then check for cert type first to write it into correct file type
-        for cert in certificates.iter() {
-            let mut f = match cert.cert_type {
-
-                SnpCertType::ARK => {
-                    let mut path = args.ark_path.clone();
-
-                    if path.as_os_str().is_empty() {
-                        path = PathBuf::from("./certs");
-                        let encode_type = identify_cert(&cert.data[0..27]);
-                        if encode_type.eq("pem") {
-                            path.push("ark.pem")
-                        } else {
-                            path.push("ark.der")
-                        }
-                    }
-
-                    fs::File::create(path).context("unable to create/open ARK file")?
-                },
-
-                SnpCertType::ASK => {
-                    let mut path = args.ask_path.clone();
-
-                    if path.as_os_str().is_empty(){
-                        path = PathBuf::from("./certs");
-                        let encode_type = identify_cert(&cert.data[0..27]);
-                        if encode_type.eq("pem") {
-                            path.push("ask.pem")
-                        } else {
-                            path.push("ask.der")
-                        }
-                    }
-
-                    fs::File::create(path).context("unable to create/open ASK file")?
-                },
-
-                SnpCertType::VCEK => {
-                    let mut path = args.vcek_path.clone();
-
-                    if path.as_os_str().is_empty(){
-                        path = PathBuf::from("./certs");
-                        let encode_type = identify_cert(&cert.data[0..27]);
-                        if encode_type.eq("pem") {
-                            path.push("vcek.pem")
-                        } else {
-                            path.push("vcek.der")
-                        }
-                    }
-
-                    fs::File::create(path).context("unable to create/open VCEK file")?
-                },
+        // Get Request data
+        let request_data = match args.request_file{
+            
+            // Request path provided
+            Some(path) => {
                 
-                _ => continue,
+                // Generate random request data and place in specified path
+                let request_data = if args.random {
+                    let request_buf = create_random_request();
+                    let file = File::create(path).context("Failed to create a random request file for report request")?;
+                    write_hex(&mut BufWriter::new(file),&request_buf).context("Failed to write request data in request file")?;
+                    request_buf
+                
+                // Open and read data on specified file
+                } else {
+                    let mut request_file = File::open(path)
+                        .context("Could not open the report request file.")?;
+                    let mut request_buf: [u8; 64] = [0; 64];
+                    request_file
+                        .read(&mut request_buf)
+                        .context("Could not read report request file.")?;
+                    request_buf
+                };
+
+                request_data
+            },
+
+            // No request path was provided
+            None => {
+
+                // random flag was passed, generate random buffer and place in default path
+                let request_data = if args.random {
+                    let request_buf = create_random_request();
+                    let file = File::create("./random-request-file.txt").context("Failed to create a random request file for report request")?;
+                    write_hex(&mut BufWriter::new(file),&request_buf).context("Failed to write request data in request file")?;
+                    request_buf
+                
+                // Random flag was not passed, return error         
+                    } else {
+                        return Err(anyhow::anyhow!("Please provide a request-file or use --random flag to create one in order request attestation report."));
+                    };
+
+                request_data
+
+            },
+
+        };
+
+        // Get VMPL level from arg
+        let vmpl = match args.vmpl{
+            Some(level) =>  if level > 3 {
+                return Err(anyhow::anyhow!("Invalid VMPL level"));
+            } else {
+                level
+            },
+            None => 1
+        };
+
+        // Regular report requested
+        if !args.extended_report {
+
+            // Get attestation report path
+            let att_report_path = match args.att_report_path {
+                Some(path) => path,
+                None => PathBuf::from_str("./attestation_report.bin").context("unable to create default path")?
             };
 
-            f.write(&cert.data)
-                .context(format!("unable to write data to file {:?}", f))?;
+            // Request attestation rerport
+            let att_report = sev_fw
+                .get_report(args.message_version, Some(request_data), vmpl)
+                .context("Failed to get report.")?;
+
+            // Write attestation report into bin file
+            let mut attestation_file = File::create(att_report_path)
+                .context("Failed to create Attestation Report File")?;
+            bincode::serialize_into(&mut attestation_file, &att_report)
+                .context("Could not serialize attestation report into file.")?;
+        
+        // Extended report requested
+        } else {
+
+            // Get attestation report path
+            let att_report_path = match args.att_report_path {
+                Some(path) => path,
+                None => PathBuf::from_str("./attestation_report.bin").context("unable to create attestation report default path")?
+            };
+
+            // Request extended report
+            let (att_report, certificates) = sev_fw
+                .get_ext_report(args.message_version, Some(request_data), vmpl)
+                .context("Failed to get extended report.")?;
+
+            // Write attestation report into file
+            let mut attestation_file = File::create(att_report_path)
+                .context("Failed to create Attestation Report File")?;
+            bincode::serialize_into(&mut attestation_file, &att_report)
+                .context("Could not serialize attestation report into file.")?;
+
+            // Check for certificates
+            if certificates.is_empty() {
+                panic!("The certicate chain was not loaded by the host")
+            }
+    
+            // If default path is being used, make sure certs folder is created if missing
+            if args.ark_path.is_none() | args.ask_path.is_none() | args.vcek_path.is_none() {
+                if !Path::new("./certs").is_dir() {
+                    fs::create_dir("./certs").context("Could not create certs folder")?;
+                }
+            }
+
+            // Cycle throgh certs and write them into the passed file path.
+            // If default path is being used, then check for cert type first to write it into correct file type
+            for cert in certificates.iter() {
+                let mut f = match cert.cert_type {
+
+                    CertType::ARK => {
+
+                        // Check for path, if none is provided use default value
+                        match args.ark_path {
+                            Some(ref path) => fs::File::create(path).context("unable to create/open ARK file")?,
+                            None => {
+                                let mut path = PathBuf::from("./certs");
+                                let encode_type = identify_cert(&cert.data[0..27]);
+                                if encode_type.eq("pem") {
+                                    path.push("ark.pem")
+                                } else {
+                                    path.push("ark.der")
+                                }
+                                fs::File::create(path).context("unable to create/open ARK file")?
+                            }
+                        }
+                    },
+
+                    CertType::ASK => {
+                        // Check for path, if none is provided use default value
+                        match args.ask_path {
+                            Some(ref path) => fs::File::create(path).context("unable to create/open ASK file")?,
+                            None => {
+                                let mut path = PathBuf::from("./certs");
+                                let encode_type = identify_cert(&cert.data[0..27]);
+                                if encode_type.eq("pem") {
+                                    path.push("ask.pem")
+                                } else {
+                                    path.push("ask.der")
+                                }
+                                fs::File::create(path).context("unable to create/open VCEK file")?
+                            }
+                        }
+                    },
+
+                    CertType::VCEK => {
+                        // Check for path, if none is provided use default value
+                        match args.vcek_path {
+                            Some(ref path) => fs::File::create(path).context("unable to create/open VCEK file")?,
+                            None => {
+                                let mut path = PathBuf::from("./certs");
+                                let encode_type = identify_cert(&cert.data[0..27]);
+                                if encode_type.eq("pem") {
+                                    path.push("vcek.pem")
+                                } else {
+                                    path.push("vcek.der")
+                                }
+                                fs::File::create(path).context("unable to create/open VCEK file")?
+                            }
+                        }
+                    },
+            
+                    _ => continue,
+                };
+
+                f.write(&cert.data)
+                    .context(format!("unable to write data to file {:?}", f))?;
+            } 
         }
 
         Ok(())
@@ -276,24 +328,22 @@ mod cert_chain {
     pub struct Args {
         #[structopt(
             long = "processor",
+            short,
             help = "Specify processor version for the certificate chain",
-            default_value = "Milan"
         )]
         pub processor_type: String,
 
         #[structopt(
-            long,
-            default_value = "./certs/ark.pem",
-            help = "File to write the AMD Root Key (ARK) to "
+            long = "ark",
+            help = "File to write the AMD Root Key (ARK) to. Defaults to ./certs/ark.pem"
         )]
-        pub ark_path: PathBuf,
+        pub ark_path: Option<PathBuf>,
 
         #[structopt(
-            long,
-            default_value = "./certs/ask.pem",
-            help = "File to write the AMD Signing Key (ASK) to"
+            long = "ask",
+            help = "File to write the AMD Signing Key (ASK) to. Defaults to ./certs/ask.pem"
         )]
-        pub ask_path: PathBuf,
+        pub ask_path: Option<PathBuf>,
     }
 
     // Function to request certificate chain
@@ -303,7 +353,13 @@ mod cert_chain {
         const KDS_CERT_SITE: &str = "https://kdsintf.amd.com";
         const KDS_VCEK: &str = "/vcek/v1";
         const KDS_CERT_CHAIN: &str = "cert_chain";
-        let sev_prod_name: &str = &args.processor_type;
+
+        // Get the processor type
+        let sev_prod_name = match args.processor_type.to_lowercase().as_str() {
+            "milan" => "Milan",
+            "genoa" => "Genoa",
+            _ => return Err(anyhow::anyhow!("Processor type not found!")),
+        };
 
         // Should make -> https://kdsintf.amd.com/vcek/v1/{SEV_PROD_NAME}/cert_chain
         let url: String = format!("{KDS_CERT_SITE}{KDS_VCEK}/{sev_prod_name}/{KDS_CERT_CHAIN}");
@@ -326,22 +382,28 @@ mod cert_chain {
 
         // If default path is being used, make sure that certs folder exists
         // If missing create it
-        if args.ark_path.as_os_str().eq("./certs/ark.pem") | args.ask_path.as_os_str().eq("./certs/ask.pem") {
-            if !Path::new("./certs").exists() {
+        // If default path is being used, make sure certs folder is created if missing
+        if args.ark_path.is_none() | args.ask_path.is_none(){
+            if !Path::new("./certs").is_dir() {
                 fs::create_dir("./certs").context("Could not create certs folder")?;
             }
         }
 
         // Write ark into file
-        let mut ark_file =
-            fs::File::create(args.ark_path.clone()).context("unable to create/open ARK file")?;
+        let mut ark_file = match args.ark_path {
+            Some(ref path) => fs::File::create(path).context("unable to create ARK file")?,
+            None => fs::File::create("./certs/ark.pem").context("unable to create ARK file")?
+        };
         ark_file
             .write(&ark.to_pem()?)
             .context(format!("unable to write data to file {:?}", ark_file))?;
-
+        
+        
         // Write ask into file
-        let mut ask_file =
-            fs::File::create(args.ask_path.clone()).context("unable to create/open ASK file")?;
+        let mut ask_file = match args.ask_path {
+            Some(ref path) => fs::File::create(path).context("unable to create ASK file")?,
+            None => fs::File::create("./certs/ask.pem").context("unable to create ASK file")?
+        };
         ask_file
             .write(&ask.to_pem()?)
             .context(format!("unable to write data to file {:?}", ask_file))?;
@@ -359,24 +421,50 @@ mod vcek {
     pub struct Args {
         #[structopt(
             long = "processor",
+            short,
             help = "Specify processor version for the certificate chain",
-            default_value = "Milan"
         )]
         pub processor_type: String,
 
         #[structopt(
-            long,
-            default_value = "./certs/vcek.der",
+            long = "vcek",
             help = "File to write the he Versioned Chip Endorsement Key (VCEK) to"
         )]
-        pub vcek_path: PathBuf,
+        pub vcek_path: Option<PathBuf>,
 
         #[structopt(
-            long,
-            default_value = "./attestation_report.bin",
+            long = "attestation-report",
+            short,
             help = "File to read attestation report from"
         )]
-        pub att_report_path: PathBuf,
+        pub att_report_path: Option<PathBuf>,
+    }
+
+    // Request an attestation report with default values and place into provided path if any.
+    fn request_default_att(report_path: Option<PathBuf>) -> Result<AttestationReport, anyhow::Error> {
+        let mut sev_fw: Firmware = Firmware::open().context("failed to open SEV firmware device.")?;
+
+        // Get attestation report path
+        let att_report_path = match report_path {
+            Some(path) => path,
+            None => PathBuf::from_str("./attestation_report.bin").context("unable to create default path")?
+        };
+
+        // Generate random data buffer
+        let request_data = create_random_request();
+        let file = File::create("./random-request-file.txt").context("Failed to create a random request file for report request")?;
+        write_hex(&mut BufWriter::new(file),&request_data).context("Failed to write request data in request file")?;
+        
+        // Get attestation report
+        let att_report = sev_fw.get_report(None, Some(request_data),1).context("Failed to get report.")?;
+
+        // Write attestation report into a bin file
+        let mut attestation_file = File::create(att_report_path)
+            .context("Failed to create Attestation Report File")?;
+        bincode::serialize_into(&mut attestation_file, &att_report)
+            .context("Could not serialize attestation report into file.")?;
+
+        Ok(att_report)
     }
 
     // Function to request vcek from KDS
@@ -385,11 +473,46 @@ mod vcek {
         // KDS URL parameters
         const KDS_CERT_SITE: &str = "https://kdsintf.amd.com";
         const KDS_VCEK: &str = "/vcek/v1";
-        let sev_prod_name: &str = &args.processor_type;
+
+        // Get the processor type
+        let sev_prod_name = match args.processor_type.to_lowercase().as_str() {
+            "milan" => "Milan",
+            "genoa" => "Genoa",
+            _ => return Err(anyhow::anyhow!("Processor type not found!")),
+        };
+
+        // Get attestation report path
+        let att_report_path = match args.att_report_path {
+            Some(path) => path,
+            None => PathBuf::from_str("./attestation_report.bin").context("unable to create default path")?
+        };
+
+        // Report doesn't exist in provided path, ask for user input, defaults to yes
+        let att_report = if !att_report_path.exists() {
+            println!("Attestation Report in provided path was not found.");
+            println!("Would you like to request report with random data and default values? [Y|n]");
+            
+            // Read user input
+            let mut rsp = String::new();
+            io::stdin().read_line(&mut rsp).expect("failed to readline");
+            match rsp.trim().to_lowercase().as_str() {
+                
+                // user said approved, put attestation report into provided path, continue with request
+                "yes" | "y" | "" => request_default_att(Some(att_report_path)),
+                
+                // user declined, or wrong input
+                "no" | "n" => return Err(anyhow::anyhow!("Please provide an attestation report to request a VCEK certificate from the KDS.")),
+                _ => return Err(anyhow::anyhow!("Invalid response. Please provide an attestation report to request a VCEK certificate from the KDS.")),
+            }?
+
+        } else {
 
         // Open existing attestation report to get needed parameters for URL
-        let att_report = open_att_report(args.att_report_path)
-            .context("Could not open attestation report file.")?;
+            let att_report = open_att_report(att_report_path)
+                .context("Could not open attestation report file.")?;
+
+            att_report
+        };
 
         //Convert chip id into hex
         let hw_id: String = hex::encode(&att_report.chip_id);
@@ -412,15 +535,21 @@ mod vcek {
 
         // Check to see if default path is being used.
         // If default path is being used, and certs directory is missing, create it.
-        if args.vcek_path.as_os_str().eq("./certs/vcek.der") {
+        if args.vcek_path.is_none() {
             if !Path::new("./certs").exists() {
                 fs::create_dir("./certs").context("Could not create certs folder")?;
             }
         }
 
+        // Grab vcek path or use default
+        let vcek_path = match args.vcek_path {
+            Some(path) => path,
+            None => PathBuf::from_str("./certs/vcek.der").context("unable to create VCEK default path")?
+        };
+
         // Create Vcek file and write contents into it.
         let mut vcek_file =
-            fs::File::create(args.vcek_path.clone()).context("unable to create/open VCEK file")?;
+            fs::File::create(vcek_path).context("unable to create/open VCEK file")?;
         vcek_file
         .write(&vcek_rsp_bytes)
         .context(format!("unable to write data to file {:?}", vcek_file))?;
