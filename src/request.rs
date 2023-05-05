@@ -18,7 +18,7 @@ use sev::firmware::{
     host::CertType
 };
 
-use certs::identify_cert;
+use certs::{identify_cert,CertEncryption};
 
 // Create 64 random bytes of data
 pub fn create_random_request() -> [u8; 64] {
@@ -240,7 +240,7 @@ use super::*;
 
             // Check for certificates
             if certificates.is_empty() {
-                panic!("The certicate chain was not loaded by the host")
+                return Err(anyhow::anyhow!("The certificate chain is empty! Certificates probably not loaded by the host."))
             }
     
             // If default path is being used, make sure certs folder is created if missing
@@ -262,12 +262,10 @@ use super::*;
                             Some(ref path) => fs::File::create(path).context("unable to create/open ARK file")?,
                             None => {
                                 let mut path = PathBuf::from("./certs");
-                                let encode_type = identify_cert(&cert.data[0..27]);
-                                if encode_type.eq("pem") {
-                                    path.push("ark.pem")
-                                } else {
-                                    path.push("ark.der")
-                                }
+                                match identify_cert(&cert.data[0..27]) {
+                                    CertEncryption::PEM => path.push("ark.pem"),
+                                    CertEncryption::DER => path.push("ark.der")
+                                };
                                 fs::File::create(path).context("unable to create/open ARK file")?
                             }
                         }
@@ -279,12 +277,10 @@ use super::*;
                             Some(ref path) => fs::File::create(path).context("unable to create/open ASK file")?,
                             None => {
                                 let mut path = PathBuf::from("./certs");
-                                let encode_type = identify_cert(&cert.data[0..27]);
-                                if encode_type.eq("pem") {
-                                    path.push("ask.pem")
-                                } else {
-                                    path.push("ask.der")
-                                }
+                                match identify_cert(&cert.data[0..27]) {
+                                    CertEncryption::PEM => path.push("ask.pem"),
+                                    CertEncryption::DER => path.push("ask.der")
+                                };
                                 fs::File::create(path).context("unable to create/open VCEK file")?
                             }
                         }
@@ -296,12 +292,10 @@ use super::*;
                             Some(ref path) => fs::File::create(path).context("unable to create/open VCEK file")?,
                             None => {
                                 let mut path = PathBuf::from("./certs");
-                                let encode_type = identify_cert(&cert.data[0..27]);
-                                if encode_type.eq("pem") {
-                                    path.push("vcek.pem")
-                                } else {
-                                    path.push("vcek.der")
-                                }
+                                match identify_cert(&cert.data[0..27]) {
+                                    CertEncryption::PEM => path.push("vcek.pem"),
+                                    CertEncryption::DER => path.push("vcek.der")
+                                };
                                 fs::File::create(path).context("unable to create/open VCEK file")?
                             }
                         }
