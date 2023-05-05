@@ -13,7 +13,7 @@ use openssl::{
     sha::Sha384
 };
 
-use certs::identify_cert;
+use certs::{identify_cert, CertEncryption};
 
 // Function used to read contents of an attestation report file. Returns AttestationReport.
 pub fn open_att_report(att_report_path: PathBuf) -> Result<AttestationReport, anyhow::Error> {
@@ -58,10 +58,9 @@ pub fn convert_path_to_cert(cert_path: &PathBuf, cert_type: &str) -> Result<X509
     current_file.read_to_end(&mut buf).context(format!("Could not read contents of {cert_type} file"))?;
 
     // Convert to x509 from data, check to see if in der or pem format
-    let x509_cert = if identify_cert(&buf[0..27]).eq("pem") {
-        X509::from_pem(&buf).context(format!("Could not convert {cert_type} data into X509"))?
-    } else {
-        X509::from_der(&buf).context(format!("Could not convert {cert_type} data into X509"))?
+    let x509_cert = match identify_cert(&buf[0..27]) {
+        CertEncryption::PEM => X509::from_pem(&buf).context(format!("Could not convert {cert_type} data into X509"))?,
+        CertEncryption::DER => X509::from_der(&buf).context(format!("Could not convert {cert_type} data into X509"))?
     };
 
     Ok(x509_cert)
