@@ -1,13 +1,17 @@
 use anyhow::{Context, Result};
 use structopt::StructOpt;
 
-mod guest;
-mod request;
 mod certs;
+mod display;
+mod fetch;
+mod report;
+mod verify;
 
-// Request and guest command options
-use request::RequestCmd;
-use guest::GuestCmd;
+// Command options
+use display::DisplayCmd;
+use fetch::FetchCmd;
+use report::ReportArgs;
+use verify::VerifyCmd;
 
 const VERSION: &str = env!("CARGO_PKG_VERSION");
 const AUTHORS: &str = env!("CARGO_PKG_AUTHORS");
@@ -27,13 +31,17 @@ struct SnpGuest {
 #[derive(StructOpt)]
 #[structopt(author = AUTHORS, version = VERSION, about = "Utilities for managing the SNP Guest environment")]
 enum SnpGuestCmd {
-    #[structopt(
-        about = "Request a report or extended report from the PSP. Can also request the certificate chain and VCEK from the KDS."
-    )]
-    Request(RequestCmd),
-    
-    #[structopt(about = "Different guest tools to manage your secure guest.")]
-    Guest(GuestCmd),
+    #[structopt(about = "Report command to request attestation report.")]
+    Report(ReportArgs),
+
+    #[structopt(about = "Fetch command to request certificates from KDS.")]
+    Fetch(FetchCmd),
+
+    #[structopt(about = "Verify command to verify certificates and attestation report")]
+    Verify(VerifyCmd),
+
+    #[structopt(about = "Display command to display files in human readable form.")]
+    Display(DisplayCmd),
 }
 
 fn main() -> Result<()> {
@@ -43,8 +51,10 @@ fn main() -> Result<()> {
     let snpguest = SnpGuest::from_args();
 
     let status = match snpguest.cmd {
-        SnpGuestCmd::Request(subcmd) => request::cmd(subcmd),
-        SnpGuestCmd::Guest(subcmd) => guest::cmd(subcmd,snpguest.quiet),
+        SnpGuestCmd::Report(args) => report::get_report(args),
+        SnpGuestCmd::Fetch(subcmd) => fetch::cmd(subcmd),
+        SnpGuestCmd::Verify(subcmd) => verify::cmd(subcmd, snpguest.quiet),
+        SnpGuestCmd::Display(subcmd) => display::cmd(subcmd, snpguest.quiet),
     };
 
     // Show caught error if quiet is not enabled.
@@ -57,6 +67,5 @@ fn main() -> Result<()> {
         }
     }
 
-    // Return status
     status
 }
