@@ -1,0 +1,385 @@
+use super::*;
+use anyhow;
+use openssl::{ecdsa::EcdsaSig, sha::Sha384};
+use std::{io::ErrorKind, path::PathBuf};
+
+use sev::certs::snp::Chain;
+
+use certs::{convert_path_to_cert, CertPaths};
+
+// Verify command structure
+#[derive(StructOpt)]
+pub enum VerifyCmd {
+    #[structopt(about = "Verify the certificate chain root of trust")]
+    CertificateChain(certificate_chain::Args),
+
+    #[structopt(about = "Verify the trusted computing based (TCB)")]
+    TCB(tcb::Args),
+
+    #[structopt(about = "Verify the Attestation Report Signature with the VCEK")]
+    AttestationSignature(attestation_signature::Args),
+}
+
+// Verify subcommands
+pub fn cmd(cmd: VerifyCmd, quiet: bool) -> Result<()> {
+    match cmd {
+        VerifyCmd::CertificateChain(args) => certificate_chain::validate_cc(args, quiet),
+        VerifyCmd::TCB(args) => tcb::validate_cert_metadata(args, quiet),
+        VerifyCmd::AttestationSignature(args) => {
+            attestation_signature::verify_attestation_signature(args, quiet)
+        }
+    }
+}
+
+// Find a certificate in specified directory according to its extension
+pub fn find_cert_in_dir(dir: PathBuf, cert: &str) -> Result<PathBuf, anyhow::Error> {
+    if PathBuf::from(dir.join(format!("{cert}.pem"))).exists() {
+        Ok(PathBuf::from(dir.join(format!("{cert}.pem"))))
+    } else if PathBuf::from(dir.join(format!("{cert}.der"))).exists() {
+        Ok(PathBuf::from(dir.join(format!("{cert}.der"))))
+    } else {
+        return Err(anyhow::anyhow!("{cert} certificate not found in directory"));
+    }
+}
+
+// Module to verify certificate chain
+mod certificate_chain {
+    use sev::certs::snp::Verifiable;
+
+    use super::*;
+
+    #[derive(StructOpt)]
+    pub struct Args {
+        #[structopt(
+            long = "certs",
+            short,
+            help = "Path to directory containing certificate chain. Defaults to ./certs"
+        )]
+        pub certs_path: Option<PathBuf>,
+    }
+
+    // Verify Certificate Chain function
+    pub fn validate_cc(args: Args, quiet: bool) -> Result<()> {
+        // Get cert directory path
+        let certs_path = match args.certs_path {
+            Some(path) => path,
+            None => PathBuf::from("./certs"),
+        };
+
+        // Find Certs
+        let ark_path = find_cert_in_dir(certs_path.clone(), "ark")?;
+        let ask_path = find_cert_in_dir(certs_path.clone(), "ask")?;
+        let vcek_path = find_cert_in_dir(certs_path.clone(), "vcek")?;
+
+        // Get cert chain from cert paths
+        let cert_chain: Chain = CertPaths {
+            ark_path: ark_path,
+            ask_path: ask_path,
+            vcek_path: vcek_path,
+        }
+        .try_into()?;
+
+        // Get each certificate
+        let ark = cert_chain.ca.ark;
+        let ask = cert_chain.ca.ask;
+        let vcek = cert_chain.vcek;
+
+        // Verify ark
+        match (&ark, &ark).verify() {
+            Ok(()) => {
+                if !quiet {
+                    println!("The AMD ARK was self-signed!");
+                }
+            }
+            Err(e) => match e.kind() {
+                ErrorKind::Other => return Err(anyhow::anyhow!("The AMD ARK is not self-signed!")),
+                _ => {
+                    return Err(anyhow::anyhow!(
+                        "Failed to verify the ARK cerfificate: {:?}",
+                        e
+                    ))
+                }
+            },
+        }
+
+        // Verify ask
+        match (&ark, &ask).verify() {
+            Ok(()) => {
+                if !quiet {
+                    println!("The AMD ASK was signed by the AMD ARK!");
+                }
+            }
+            Err(e) => match e.kind() {
+                ErrorKind::Other => {
+                    return Err(anyhow::anyhow!("The AMD ASK ws not signed by the AMD ARK!"))
+                }
+                _ => return Err(anyhow::anyhow!("Failed to verify ASK certificate: {:?}", e)),
+            },
+        }
+
+        // Verify vcek
+        match (&ask, &vcek).verify() {
+            Ok(()) => {
+                if !quiet {
+                    println!("The VCEK was signed by the AMD ASK!");
+                }
+            }
+            Err(e) => match e.kind() {
+                ErrorKind::Other => {
+                    return Err(anyhow::anyhow!("The VCEK was not signed by the AMD ASK!"))
+                }
+                _ => {
+                    return Err(anyhow::anyhow!(
+                        "Failed to verify VCEK certificate: {:?}",
+                        e
+                    ))
+                }
+            },
+        }
+        Ok(())
+    }
+}
+
+// Module to verify Trusted Compute Base
+mod tcb {
+    use super::*;
+
+    use asn1_rs::{oid, FromDer, Oid};
+
+    use x509_parser::{self, certificate::X509Certificate, prelude::X509Extension};
+
+    enum SnpOid {
+        BootLoader,
+        Tee,
+        Snp,
+        Ucode,
+        HwId,
+    }
+
+    // OID extensions for the VCEK, will be used to verify attestation report
+    impl SnpOid {
+        fn oid(&self) -> Oid {
+            match self {
+                SnpOid::BootLoader => oid!(1.3.6 .1 .4 .1 .3704 .1 .3 .1),
+                SnpOid::Tee => oid!(1.3.6 .1 .4 .1 .3704 .1 .3 .2),
+                SnpOid::Snp => oid!(1.3.6 .1 .4 .1 .3704 .1 .3 .3),
+                SnpOid::Ucode => oid!(1.3.6 .1 .4 .1 .3704 .1 .3 .8),
+                SnpOid::HwId => oid!(1.3.6 .1 .4 .1 .3704 .1 .4),
+            }
+        }
+    }
+
+    // Check if the certificate extension matches provided value
+    fn check_cert_ext_byte(ext: &X509Extension, val: u8) -> bool {
+        if ext.value[0] != 0x2 {
+            panic!("Invalid type encountered!");
+        }
+        if ext.value[1] != 0x1 && ext.value[1] != 0x2 {
+            panic!("Invalid octet length encountered");
+        }
+        if let Some(byte_value) = ext.value.last() {
+            *byte_value == val
+        } else {
+            false
+        }
+    }
+
+    // Check if certificate extension bytes match provided bytes
+    fn check_cert_ext_bytes(ext: &X509Extension, val: &[u8]) -> bool {
+        ext.value == val
+    }
+
+    #[derive(StructOpt)]
+    pub struct Args {
+        #[structopt(
+            long = "att-report",
+            short,
+            help = "File to write the attestation report to. Defaults to ./attestation_report.bin"
+        )]
+        pub att_report_path: Option<PathBuf>,
+
+        #[structopt(
+            long = "certs",
+            short,
+            help = "Path to directory containing certificate chain. Defaults to ./certs"
+        )]
+        pub certs_path: Option<PathBuf>,
+    }
+
+    // Function to validate the vcek metadata with the TCB
+    pub fn validate_cert_metadata(args: Args, quiet: bool) -> Result<()> {
+        // Get attestation report path
+        let report_path = match args.att_report_path {
+            Some(path) => path,
+            None => PathBuf::from("./attestation_report.bin"),
+        };
+
+        // Get vcek path
+        let vcek_path = match args.certs_path {
+            Some(path) => find_cert_in_dir(path, "vcek")?,
+            None => find_cert_in_dir(PathBuf::from("./certs"), "vcek")?,
+        };
+
+        // Open attestation report from given path
+        let attestation_report = report::read_report(report_path)?;
+
+        // Open VCEK certificate and convert into der
+        let vcek_der = convert_path_to_cert(&vcek_path, "vcek")?
+            .to_der()
+            .context("Could not convert VCEK to der.")?;
+
+        // Convert der format VCEK into a x509Certificate (Different from openssl x509)
+        let (_, vcek_x509) = X509Certificate::from_der(&vcek_der)
+            .context("Could not create X509Certificate from der")?;
+
+        // Create Hashmap of the VCEK extensions
+        let extensions: std::collections::HashMap<Oid, &X509Extension> = vcek_x509
+            .extensions_map()
+            .context("Failed getting VCEK oids.")?;
+
+        // Grab BootLoader information from VCEK and compare with attestation report
+        if let Some(cert_bl) = extensions.get(&SnpOid::BootLoader.oid()) {
+            if !check_cert_ext_byte(cert_bl, attestation_report.reported_tcb.bootloader) {
+                return Err(anyhow::anyhow!(
+                    "Report TCB Boot Loader and Certificate Boot Loader mismatch encountered."
+                ));
+            }
+            if !quiet {
+                println!(
+                    "Reported TCB Boot Loader from certificate matches the attestation report."
+                );
+            }
+        }
+
+        // Grab Tee information from VCEK and compare with attestation report
+        if let Some(cert_tee) = extensions.get(&SnpOid::Tee.oid()) {
+            if !check_cert_ext_byte(cert_tee, attestation_report.reported_tcb.tee) {
+                return Err(anyhow::anyhow!(
+                    "Report TCB TEE and Certificate TEE mismatch encountered."
+                ));
+            }
+            if !quiet {
+                println!("Reported TCB TEE from certificate matches the attestation report.");
+            }
+        }
+
+        // Grab SNP information from VCEK and compare with attestation report
+        if let Some(cert_snp) = extensions.get(&SnpOid::Snp.oid()) {
+            if !check_cert_ext_byte(cert_snp, attestation_report.reported_tcb.snp) {
+                return Err(anyhow::anyhow!(
+                    "Report TCB SNP and Certificate SNP mismatch encountered."
+                ));
+            }
+            if !quiet {
+                println!("Reported TCB SNP from certificate matches the attestation report.");
+            }
+        }
+
+        // Grab Microcode information from VCEK and compare with attestation report
+        if let Some(cert_ucode) = extensions.get(&SnpOid::Ucode.oid()) {
+            if !check_cert_ext_byte(cert_ucode, attestation_report.reported_tcb.microcode) {
+                return Err(anyhow::anyhow!(
+                    "Report TCB Microcode and Certificate Microcode mismatch encountered."
+                ));
+            }
+            if !quiet {
+                println!("Reported TCB Microcode from certificate matches the attestation report.");
+            }
+        }
+
+        // Grab HW ID information from VCEK and compare it with attestation report
+        if let Some(cert_hwid) = extensions.get(&SnpOid::HwId.oid()) {
+            if !check_cert_ext_bytes(cert_hwid, &attestation_report.chip_id) {
+                return Err(anyhow::anyhow!(
+                    "Report TCB Microcode and Certificate Microcode mismatch encountered."
+                ));
+            }
+            if !quiet {
+                println!("Chip ID from certificate matches the attestation report.");
+            }
+        }
+
+        Ok(())
+    }
+}
+
+// Module to verify the attestation report signature
+mod attestation_signature {
+    use super::*;
+
+    #[derive(StructOpt)]
+    pub struct Args {
+        #[structopt(
+            long = "att-report",
+            short,
+            help = "File to write the attestation report to. Defaults to ./attestation_report.bin"
+        )]
+        pub att_report_path: Option<PathBuf>,
+
+        #[structopt(
+            long = "certs",
+            short,
+            help = "Path to directory containing certificate chain. Defaults to ./certs"
+        )]
+        pub certs_path: Option<PathBuf>,
+    }
+
+    // Function to verify attestation report signature
+    pub fn verify_attestation_signature(args: Args, quiet: bool) -> Result<()> {
+        // Get attestation report path
+        let report_path = match args.att_report_path {
+            Some(path) => path,
+            None => PathBuf::from("./attestation_report.bin"),
+        };
+
+        // Get vcek path
+        let vcek_path = match args.certs_path {
+            Some(path) => find_cert_in_dir(path, "vcek")?,
+            None => find_cert_in_dir(PathBuf::from("./certs"), "vcek")?,
+        };
+
+        // Open Attestation Report
+        let attestation_report = report::read_report(report_path)?;
+
+        // Get ECDSASIG from the attestation report
+        let ar_signature = EcdsaSig::try_from(&attestation_report.signature)
+            .context("Failed to get ECDSA Signature from attestation report.")?;
+
+        // Serialize the attestation report and grab the signed bytes
+        let signed_bytes = &bincode::serialize(&attestation_report)
+            .context("Failed to get the signed bytes from the attestation report.")?[0x0..0x2A0];
+
+        // Open VCEK from path
+        let vcek = convert_path_to_cert(&vcek_path, "vcek")?;
+
+        // Get public key from VCEK
+        let vcek_pubkey = vcek
+            .public_key()
+            .context("Failed to get the public key from the VCEK.")?
+            .ec_key()
+            .context("Failed to convert VCEK public key into ECkey.")?;
+
+        // Create a hash
+        let mut hasher: Sha384 = Sha384::new();
+
+        // Update hash with the signed bytes of the attestation report
+        hasher.update(signed_bytes);
+
+        // Get Hash digest
+        let base_message_digest: [u8; 48] = hasher.finish();
+
+        // Verify attestation report signatture with digest and VCEK public key
+        if ar_signature
+            .verify(base_message_digest.as_ref(), vcek_pubkey.as_ref())
+            .context("Failed to verify attestation report signature with VCEK public key.")?
+        {
+            if !quiet {
+                println!("VCEK signed the Attestation Report!");
+            }
+        } else {
+            return Err(anyhow::anyhow!("VCEK did NOT sign the Attestation Report!"));
+        }
+
+        Ok(())
+    }
+}
