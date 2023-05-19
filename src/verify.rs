@@ -11,21 +11,21 @@ use certs::{convert_path_to_cert, CertPaths};
 #[derive(StructOpt)]
 pub enum VerifyCmd {
     #[structopt(about = "Verify the certificate chain root of trust")]
-    CertificateChain(certificate_chain::Args),
+    CERTS(certificate_chain::Args),
 
     #[structopt(about = "Verify the trusted computing based (TCB)")]
     TCB(tcb::Args),
 
     #[structopt(about = "Verify the Attestation Report Signature with the VCEK")]
-    AttestationSignature(attestation_signature::Args),
+    SIGNATURE(attestation_signature::Args),
 }
 
 // Verify subcommands
 pub fn cmd(cmd: VerifyCmd, quiet: bool) -> Result<()> {
     match cmd {
-        VerifyCmd::CertificateChain(args) => certificate_chain::validate_cc(args, quiet),
+        VerifyCmd::CERTS(args) => certificate_chain::validate_cc(args, quiet),
         VerifyCmd::TCB(args) => tcb::validate_cert_metadata(args, quiet),
-        VerifyCmd::AttestationSignature(args) => {
+        VerifyCmd::SIGNATURE(args) => {
             attestation_signature::verify_attestation_signature(args, quiet)
         }
     }
@@ -51,25 +51,18 @@ mod certificate_chain {
     #[derive(StructOpt)]
     pub struct Args {
         #[structopt(
-            long = "certs",
-            short,
-            help = "Path to directory containing certificate chain. Defaults to ./certs"
+            help = "Path to directory containing certificate chain"
         )]
-        pub certs_path: Option<PathBuf>,
+        pub certs_dir: PathBuf,
     }
 
     // Verify Certificate Chain function
     pub fn validate_cc(args: Args, quiet: bool) -> Result<()> {
-        // Get cert directory path
-        let certs_path = match args.certs_path {
-            Some(path) => path,
-            None => PathBuf::from("./certs"),
-        };
 
         // Find Certs
-        let ark_path = find_cert_in_dir(certs_path.clone(), "ark")?;
-        let ask_path = find_cert_in_dir(certs_path.clone(), "ask")?;
-        let vcek_path = find_cert_in_dir(certs_path.clone(), "vcek")?;
+        let ark_path = find_cert_in_dir(args.certs_dir.clone(), "ark")?;
+        let ask_path = find_cert_in_dir(args.certs_dir.clone(), "ask")?;
+        let vcek_path = find_cert_in_dir(args.certs_dir.clone(), "vcek")?;
 
         // Get cert chain from cert paths
         let cert_chain: Chain = CertPaths {
@@ -199,11 +192,9 @@ mod tcb {
         pub att_report_path: Option<PathBuf>,
 
         #[structopt(
-            long = "certs",
-            short,
-            help = "Path to directory containing certificate chain. Defaults to ./certs"
+            help = "Path to directory containing the VCEK"
         )]
-        pub certs_path: Option<PathBuf>,
+        pub certs_dir: PathBuf,
     }
 
     // Function to validate the vcek metadata with the TCB
@@ -215,10 +206,7 @@ mod tcb {
         };
 
         // Get vcek path
-        let vcek_path = match args.certs_path {
-            Some(path) => find_cert_in_dir(path, "vcek")?,
-            None => find_cert_in_dir(PathBuf::from("./certs"), "vcek")?,
-        };
+        let vcek_path = find_cert_in_dir(args.certs_dir, "vcek")?;
 
         // Open attestation report from given path
         let attestation_report = report::read_report(report_path)?;
@@ -317,11 +305,9 @@ mod attestation_signature {
         pub att_report_path: Option<PathBuf>,
 
         #[structopt(
-            long = "certs",
-            short,
             help = "Path to directory containing certificate chain. Defaults to ./certs"
         )]
-        pub certs_path: Option<PathBuf>,
+        pub certs_dir: PathBuf,
     }
 
     // Function to verify attestation report signature
@@ -333,10 +319,7 @@ mod attestation_signature {
         };
 
         // Get vcek path
-        let vcek_path = match args.certs_path {
-            Some(path) => find_cert_in_dir(path, "vcek")?,
-            None => find_cert_in_dir(PathBuf::from("./certs"), "vcek")?,
-        };
+        let vcek_path = find_cert_in_dir(args.certs_dir, "vcek")?;
 
         // Open Attestation Report
         let attestation_report = report::read_report(report_path)?;

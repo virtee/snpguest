@@ -64,14 +64,7 @@ pub struct ReportArgs {
         help = "Generate a random request file for the attestation report. Defaults to ./random-request-file.txt"
     )]
     pub random: bool,
-
-    #[structopt(
-        long = "message-version",
-        short,
-        help = "Used for the SnpGuestRequest, specifies the message version number. Defaults to 1"
-    )]
-    pub message_version: Option<u8>,
-
+    
     #[structopt(
         long = "vmpl",
         short,
@@ -174,7 +167,7 @@ pub fn get_report(args: ReportArgs) -> Result<()> {
 
         // Request attestation rerport
         let att_report = sev_fw
-            .get_report(args.message_version, Some(request_data), vmpl)
+            .get_report(None, Some(request_data), vmpl)
             .context("Failed to get report.")?;
 
         // Write attestation report into bin file
@@ -194,7 +187,7 @@ pub fn get_report(args: ReportArgs) -> Result<()> {
 
         // Request extended report
         let (att_report, certificates) = sev_fw
-            .get_ext_report(args.message_version, Some(request_data), vmpl)
+            .get_ext_report(None, Some(request_data), vmpl)
             .context("Failed to get extended report.")?;
 
         // Write attestation report into file

@@ -17,7 +17,7 @@ exclude = [ ".gitignore", ".github/*" ]
 structopt = "0.3"
 env_logger = "0.10.0"
 anyhow = "1.0.69"
-sev = { git = "https://github.com/virtee/sev", branch = "main", features = ['openssl']}
+sev = { git = "https://github.com/virtee/sev", branch = "main", default-features = false, features = ['openssl','snp']}
 nix = "^0.23"
 serde = { version = "1.0", features = ["derive"] }
 bincode = "^1.2.1"

@@ -4,7 +4,7 @@ use reqwest::blocking::{get, Response};
 use std::{
     fs,
     io::Write,
-    path::{Path, PathBuf},
+    path::PathBuf,
     str::FromStr,
 };
 
@@ -34,18 +34,14 @@ mod cert_authority {
     #[derive(StructOpt)]
     pub struct Args {
         #[structopt(
-            long = "processor",
-            short,
-            help = "Specify processor version for the certificate chain"
+            help = "Specify the processor model for the certificate chain"
         )]
-        pub processor_type: String,
+        pub processor_model: String,
 
         #[structopt(
-            long = "certs",
-            short,
-            help = "Directory to store certificates. Defaults to ./certs"
+            help = "Directory to store the certificates in"
         )]
-        pub certs_path: Option<PathBuf>,
+        pub certs_dir: PathBuf,
     }
 
     // Function to request certificate chain
@@ -56,7 +52,7 @@ mod cert_authority {
         const KDS_CERT_CHAIN: &str = "cert_chain";
 
         // Get the processor type
-        let sev_prod_name = match args.processor_type.to_lowercase().as_str() {
+        let sev_prod_name = match args.processor_model.to_lowercase().as_str() {
             "milan" => "Milan",
             "genoa" => "Genoa",
             _ => return Err(anyhow::anyhow!("Processor type not found!")),
@@ -77,11 +73,9 @@ mod cert_authority {
         // Create a stack from the vector
         let certificates = X509::stack_from_pem(&body)?;
 
-        // If default path is being used, make sure certs folder is created if missing
-        if args.certs_path.is_none() {
-            if !Path::new("./certs").is_dir() {
-                fs::create_dir("./certs").context("Could not create certs folder")?;
-            }
+        // Create certs folder if missing
+        if !args.certs_dir.exists() {
+            fs::create_dir(args.certs_dir.clone()).context("Could not create certs folder")?;
         }
 
         // Cycle through certs in stack
@@ -89,24 +83,22 @@ mod cert_authority {
             // Grab cert. 0 is ask and 1 is ark
             let cert = &certificates[i];
 
-            // Create path
-            let mut cert_dir = match args.certs_path.clone() {
-                Some(path) => path,
-                None => PathBuf::from("./certs"),
-            };
+            // Create path to cert
+            let mut curr_path = args.certs_dir.clone();
             let cert_type = if i.eq(&0) {
-                cert_dir.push("ask.pem");
+                curr_path.push("ask.pem");
                 "ASK"
             } else {
-                cert_dir.push("ark.pem");
+                curr_path.push("ark.pem");
                 "ARK"
             };
 
-            // Create cert file
-            let mut cert_file = fs::File::create(cert_dir)
-                .context(format!("Unable to create {} file", cert_type))?;
-
-            // Write cert contents
+            // Create or open current cert and write contents into it
+            let mut cert_file = if curr_path.exists(){
+                std::fs::OpenOptions::new().write(true).truncate(true).open(curr_path).context(format!("Unable to overwrite {} cert contents", cert_type))?
+            } else {
+                fs::File::create(curr_path).context(format!("Unable to create {} file", cert_type))?
+            };
             cert_file
                 .write(&cert.to_pem()?)
                 .context(format!("unable to write data to file {:?}", cert_file))?;
@@ -123,18 +115,14 @@ mod vcek {
     #[derive(StructOpt)]
     pub struct Args {
         #[structopt(
-            long = "processor",
-            short,
-            help = "Specify processor version for the certificate chain"
+            help = "Specify the processor model for the VCEK"
         )]
-        pub processor_type: String,
+        pub processor_model: String,
 
         #[structopt(
-            long = "certs",
-            short,
-            help = "Directory to store VCEK in. Defaults to ./certs"
+            help = "Directory to store the VCEK in"
         )]
-        pub certs_path: Option<PathBuf>,
+        pub certs_dir: PathBuf,
 
         #[structopt(
             long = "att-report",
@@ -151,7 +139,7 @@ mod vcek {
         const KDS_VCEK: &str = "/vcek/v1";
 
         // Get the processor type
-        let sev_prod_name = match args.processor_type.to_lowercase().as_str() {
+        let sev_prod_name = match args.processor_model.to_lowercase().as_str() {
             "milan" => "Milan",
             "genoa" => "Genoa",
             _ => return Err(anyhow::anyhow!("Processor type not found!")),
@@ -192,24 +180,21 @@ mod vcek {
         // Make vcek into byte vector
         let vcek_rsp_bytes = vcek_rsp.bytes().context("Unable to parse VCEK")?.to_vec();
 
-        // Check to see if default path is being used.
-        // If default path is being used, and certs directory is missing, create it.
-        if args.certs_path.is_none() {
-            if !Path::new("./certs").exists() {
-                fs::create_dir("./certs").context("Could not create certs folder")?;
-            }
+        // Create certs folder if missing
+        if !args.certs_dir.exists() {
+            fs::create_dir(args.certs_dir.clone()).context("Could not create certs folder")?;
         }
 
-        // Grab vcek path or use default
-        let mut vcek_path = match args.certs_path {
-            Some(path) => path,
-            None => PathBuf::from_str("./certs").context("unable to create default certs path")?,
-        };
+        // Create vcek path
+        let mut vcek_path = args.certs_dir.clone();
         vcek_path.push("vcek.der");
 
-        // Create Vcek file and write contents into it.
-        let mut vcek_file =
-            fs::File::create(vcek_path).context("unable to create/open VCEK file")?;
+        // Create or open Vcek file and write contents into it.
+        let mut vcek_file = if vcek_path.exists(){
+            std::fs::OpenOptions::new().write(true).truncate(true).open(vcek_path).context("Unable to overwrite VCEK cert contents")?
+        } else {
+            fs::File::create(vcek_path).context("Unable to create VCEK cert")?
+        };
         vcek_file
             .write(&vcek_rsp_bytes)
             .context(format!("unable to write data to file {:?}", vcek_file))?;
