@@ -1,7 +1,0 @@
-snpguest
-========
-
-A CLI utility for navigating the SEV-SNP guest environment.
-
-Please consult the manpage (docs/snpguest.1.adoc) for an overview of snpguest's
-commands.
