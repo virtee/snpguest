@@ -1,5 +1,4 @@
-use anyhow::{Context, Result};
-use structopt::StructOpt;
+// SPDX-License-Identifier: Apache-2.0
 
 mod certs;
 mod display;
@@ -7,16 +6,17 @@ mod fetch;
 mod report;
 mod verify;
 
-// Command options
 use display::DisplayCmd;
 use fetch::FetchCmd;
 use report::ReportArgs;
 use verify::VerifyCmd;
 
+use anyhow::{Context, Result};
+use structopt::StructOpt;
+
 const VERSION: &str = env!("CARGO_PKG_VERSION");
 const AUTHORS: &str = env!("CARGO_PKG_AUTHORS");
 
-// Guest command structure
 #[derive(StructOpt)]
 struct SnpGuest {
     #[structopt(subcommand)]
@@ -26,7 +26,6 @@ struct SnpGuest {
     pub quiet: bool,
 }
 
-// Enum with different Guest command options
 #[allow(clippy::large_enum_variant)]
 #[derive(StructOpt)]
 #[structopt(author = AUTHORS, version = VERSION, about = "Utilities for managing the SNP Guest environment")]
@@ -47,7 +46,6 @@ enum SnpGuestCmd {
 fn main() -> Result<()> {
     env_logger::init();
 
-    // Secure guest command passed from command line
     let snpguest = SnpGuest::from_args();
 
     let status = match snpguest.cmd {
@@ -57,7 +55,6 @@ fn main() -> Result<()> {
         SnpGuestCmd::Display(subcmd) => display::cmd(subcmd, snpguest.quiet),
     };
 
-    // Show caught error if quiet is not enabled.
     if let Err(ref e) = status {
         if !snpguest.quiet {
             eprintln!("ERROR: {}", e);

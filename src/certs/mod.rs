@@ -1,12 +1,15 @@
+// SPDX-License-Identifier: Apache-2.0
+
 use super::*;
-use sev::certs::snp::{ca, Certificate, Chain};
+
 use std::{
     fs,
     io::{ErrorKind, Read},
     path::PathBuf,
 };
 
-// Structure of 3 paths meant for cert-chain
+use sev::certs::snp::{ca, Certificate, Chain};
+
 pub struct CertPaths {
     pub ark_path: PathBuf,
     pub ask_path: PathBuf,
@@ -36,11 +39,8 @@ pub fn convert_path_to_cert(
     cert_path: &PathBuf,
     cert_type: &str,
 ) -> Result<Certificate, anyhow::Error> {
-    // Will contain cert data
     let mut buf = vec![];
 
-    // If path string is empty, check for cert in default path directory
-    // If path is not empty, use provided path
     let mut current_file = if cert_path.as_os_str().is_empty() {
         let temp_file = match fs::File::open(format!("./certs/{cert_type}.pem")) {
             Ok(file) => file,
@@ -64,12 +64,10 @@ pub fn convert_path_to_cert(
         fs::File::open(cert_path).context(format!("Could not open provided {cert_type} file"))?
     };
 
-    // Read certificate contents
     current_file
         .read_to_end(&mut buf)
         .context(format!("Could not read contents of {cert_type} file"))?;
 
-    // Convert to Certificate from data, depending on encoding type
     let cert = match identify_cert(&buf[0..27]) {
         CertFormat::PEM => Certificate::from_pem(&buf)
             .context(format!("Could not convert {cert_type} data into X509"))?,
