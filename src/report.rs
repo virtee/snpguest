@@ -138,17 +138,6 @@ pub fn get_report(args: ReportArgs) -> Result<()> {
         }
     };
 
-    let vmpl = match args.vmpl {
-        Some(level) => {
-            if level > 3 {
-                return Err(anyhow::anyhow!("Invalid VMPL level provided"));
-            } else {
-                level
-            }
-        }
-        None => 1,
-    };
-
     if !args.extended_report {
         let att_report_path = match args.att_report_path {
             Some(path) => path,
@@ -157,7 +146,7 @@ pub fn get_report(args: ReportArgs) -> Result<()> {
         };
 
         let att_report = sev_fw
-            .get_report(None, Some(request_data), vmpl)
+            .get_report(None, Some(request_data), args.vmpl)
             .context("Failed to get report.")?;
 
         let mut attestation_file =
@@ -174,7 +163,7 @@ pub fn get_report(args: ReportArgs) -> Result<()> {
         };
 
         let (att_report, certificates) = sev_fw
-            .get_ext_report(None, Some(request_data), vmpl)
+            .get_ext_report(None, Some(request_data), args.vmpl)
             .context("Failed to get extended report.")?;
 
         let mut attestation_file =
