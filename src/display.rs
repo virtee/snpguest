@@ -2,11 +2,12 @@
 
 use super::*;
 
+use report;
 use std::path::PathBuf;
 
 #[derive(StructOpt)]
 pub enum DisplayCmd {
-    #[structopt(about = "Display attestation report from a given file.")]
+    #[structopt(about = "Display an attestation report in console.")]
     Report(report_display::Args),
 }
 
@@ -23,19 +24,24 @@ mod report_display {
         #[structopt(
             long = "att-report",
             short,
-            help = "File to write the attestation report to. Defaults to ./attestation_report.bin"
+            help = "Optional: path to attestation report to display."
         )]
         pub att_report_path: Option<PathBuf>,
     }
 
+    // Print attestation report in console
     pub fn display_attestation_report(args: Args, quiet: bool) -> Result<()> {
-        let report_path = match args.att_report_path {
-            Some(path) => path,
-            None => PathBuf::from("./attestation_report.bin"),
+        let att_report = match args.att_report_path {
+            Some(path) => {
+                // Check that provided path contains an attestation report
+                if !path.exists() {
+                    return Err(anyhow::anyhow!("No attestation report was found. Provide an attestation report to request VCEK from the KDS."));
+                }
+                report::read_report(path).context("Could not open attestation report")?
+            }
+            // No path provieded, request an attestation report with default values and random data
+            None => report::request_default_report()?,
         };
-
-        let att_report =
-            report::read_report(report_path).context("Could not open attestation report")?;
 
         if !quiet {
             println!("{}", att_report);

@@ -6,7 +6,7 @@ use std::{
     fs,
     fs::File,
     io::{BufWriter, Read, Write},
-    path::{Path, PathBuf},
+    path::PathBuf,
     str::FromStr,
 };
 
@@ -51,32 +51,47 @@ pub fn write_hex<W: Write>(file: &mut BufWriter<W>, data: &[u8]) -> Result<()> {
     Ok(())
 }
 
+// Request an attestation report with default vmpl and random data
+pub fn request_default_report() -> Result<AttestationReport, anyhow::Error> {
+    let mut sev_fw: Firmware = Firmware::open().context("failed to open SEV firmware device.")?;
+
+    let request_buf = create_random_request();
+
+    let att_report = sev_fw
+        .get_report(None, Some(request_buf), None)
+        .context("Failed to get report.")?;
+
+    Ok(att_report)
+}
+
 #[derive(StructOpt)]
 pub struct ReportArgs {
     #[structopt(
-        long = "extended",
+        long,
         short,
-        help = "Request an extended report instead of the regular report"
+        requires = "certs-dir",
+        help = "Request an extended report instead of the regular report."
     )]
     pub extended_report: bool,
 
     #[structopt(
         long = "random",
         short,
-        help = "Generate a random request file for the attestation report. Defaults to ./random-request-file.txt"
+        help = "Use random data for attestation report request. Writes data to ./random-request-file.txt by default, use --request to specify where to write data."
     )]
     pub random: bool,
 
     #[structopt(
         long = "vmpl",
         short,
-        help = "VMPL level the Guest is running on. Defaults to 1"
+        help = "Specify VMPL level the Guest is running on. Defaults to 1."
     )]
     pub vmpl: Option<u32>,
 
     #[structopt(
-        long = "request",
-        help = "Path pointing to were the request-file location. If provided with random flag, then a random request file will be generated at that location"
+        long = "request-data",
+        short = "d",
+        help = "Provide file with data for attestation-report request. If provided with random flag, then the random data will be written in the provided path."
     )]
     pub request_file: Option<PathBuf>,
 
@@ -87,27 +102,36 @@ pub struct ReportArgs {
     )]
     pub att_report_path: Option<PathBuf>,
 
-    #[structopt(
-        long = "certs",
-        short,
-        help = "Directory to store certificates. Defaults to ./certs"
-    )]
-    pub certs_path: Option<PathBuf>,
+    #[structopt(help = "Directory to store certificates in. Required if requesting an extended-report.")]
+    pub certs_dir: Option<PathBuf>,
 }
 
+// Request attestation report and write it into a file
 pub fn get_report(args: ReportArgs) -> Result<()> {
     let mut sev_fw: Firmware = Firmware::open().context("failed to open SEV firmware device.")?;
 
+    // Read request data from file, or generate random data for request
     let request_data = match args.request_file {
         Some(path) => {
             // Generate random request data and place in specified path
             let request_data = if args.random {
                 let request_buf = create_random_request();
-                let file = File::create(path)
-                    .context("Failed to create a random request file for report request")?;
-                write_hex(&mut BufWriter::new(file), &request_buf)
+
+                // Overwrite data if file already exists
+                let request_file = if path.exists() {
+                    std::fs::OpenOptions::new()
+                        .write(true)
+                        .truncate(true)
+                        .open(path)
+                        .context("Unable to overwrite request file contents")?
+                } else {
+                    fs::File::create(path).context("Unable to create request file.")?
+                };
+                write_hex(&mut BufWriter::new(request_file), &request_buf)
                     .context("Failed to write request data in request file")?;
                 request_buf
+
+            // Read contents from provided file
             } else {
                 let mut request_file =
                     File::open(path).context("Could not open the report request file.")?;
@@ -123,12 +147,25 @@ pub fn get_report(args: ReportArgs) -> Result<()> {
 
         // No request path was provided
         None => {
+            // Generate random data and write it to default directory
             let request_data = if args.random {
                 let request_buf = create_random_request();
-                let file = File::create("./random-request-file.txt")
-                    .context("Failed to create a random request file for report request")?;
-                write_hex(&mut BufWriter::new(file), &request_buf)
+
+                // Overwrite data if file already exists
+                let request_file = if PathBuf::from("./random-request-file.txt").exists() {
+                    std::fs::OpenOptions::new()
+                        .write(true)
+                        .truncate(true)
+                        .open("./random-request-file.txt")
+                        .context("Unable to overwrite request file contents")?
+                } else {
+                    fs::File::create("./random-request-file.txt")
+                        .context("Unable to create request file contents")?
+                };
+
+                write_hex(&mut BufWriter::new(request_file), &request_buf)
                     .context("Failed to write request data in request file")?;
+
                 request_buf
             } else {
                 return Err(anyhow::anyhow!("Please provide a request-file or use --random flag to create one in order request attestation report."));
@@ -138,6 +175,7 @@ pub fn get_report(args: ReportArgs) -> Result<()> {
         }
     };
 
+    // Regular report requested
     if !args.extended_report {
         let att_report_path = match args.att_report_path {
             Some(path) => path,
@@ -145,12 +183,22 @@ pub fn get_report(args: ReportArgs) -> Result<()> {
                 .context("unable to create default path")?,
         };
 
+        // Request report
         let att_report = sev_fw
             .get_report(None, Some(request_data), args.vmpl)
             .context("Failed to get report.")?;
 
-        let mut attestation_file =
-            File::create(att_report_path).context("Failed to create Attestation Report File")?;
+        // Overwrite data if file already exists or create new file
+        let mut attestation_file = if att_report_path.exists() {
+            std::fs::OpenOptions::new()
+                .write(true)
+                .truncate(true)
+                .open(att_report_path)
+                .context("Unable to overwrite attestation report file contents")?
+        } else {
+            fs::File::create(att_report_path)
+                .context("Unable to create attestation report file contents")?
+        };
         bincode::serialize_into(&mut attestation_file, &att_report)
             .context("Could not serialize attestation report into file.")?;
 
@@ -162,12 +210,22 @@ pub fn get_report(args: ReportArgs) -> Result<()> {
                 .context("unable to create attestation report default path")?,
         };
 
+        // Request extended attestation report
         let (att_report, certificates) = sev_fw
             .get_ext_report(None, Some(request_data), args.vmpl)
             .context("Failed to get extended report.")?;
 
-        let mut attestation_file =
-            File::create(att_report_path).context("Failed to create Attestation Report File")?;
+        // Overwrite data if file already exists or create new file
+        let mut attestation_file = if att_report_path.exists() {
+            std::fs::OpenOptions::new()
+                .write(true)
+                .truncate(true)
+                .open(att_report_path)
+                .context("Unable to overwrite attestation report file contents")?
+        } else {
+            fs::File::create(att_report_path)
+                .context("Unable to create attestation report file contents")?
+        };
         bincode::serialize_into(&mut attestation_file, &att_report)
             .context("Could not serialize attestation report into file.")?;
 
@@ -177,19 +235,19 @@ pub fn get_report(args: ReportArgs) -> Result<()> {
             ));
         }
 
-        if args.certs_path.is_none() {
-            if !Path::new("./certs").is_dir() {
-                fs::create_dir("./certs").context("Could not create certs folder")?;
-            }
-        }
+        // Generate path from provided certs path
+        let certs_path = match args.certs_dir {
+            Some(path) => path,
+            None => return Err(anyhow::anyhow!("No cert directory provided.")),
+        };
+
+        // Create certificate directory if missing
+        if !certs_path.exists() {
+            fs::create_dir(certs_path.clone()).context("Could not create certs folder")?;
+        };
 
         for cert in certificates.iter() {
-            // Generate path from provided certs path
-            let mut path = match args.certs_path.clone() {
-                Some(path) => path,
-                None => PathBuf::from("./certs"),
-            };
-
+            let mut path = certs_path.clone();
             // Create file for certipicate depeninding on its type and format
             let mut f = match cert.cert_type {
                 CertType::ARK => {
@@ -218,7 +276,7 @@ pub fn get_report(args: ReportArgs) -> Result<()> {
 
                 _ => continue,
             };
-
+            // Write cert contents into file
             f.write(&cert.data)
                 .context(format!("unable to write data to file {:?}", f))?;
         }

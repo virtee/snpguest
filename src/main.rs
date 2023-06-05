@@ -30,13 +30,13 @@ struct SnpGuest {
 #[derive(StructOpt)]
 #[structopt(author = AUTHORS, version = VERSION, about = "Utilities for managing the SNP Guest environment")]
 enum SnpGuestCmd {
-    #[structopt(about = "Report command to request attestation report.")]
+    #[structopt(about = "Report command to request an attestation report.")]
     Report(ReportArgs),
 
-    #[structopt(about = "Fetch command to request certificates from KDS.")]
+    #[structopt(about = "Fetch command to request certificates.")]
     Fetch(FetchCmd),
 
-    #[structopt(about = "Verify command to verify certificates and attestation report")]
+    #[structopt(about = "Verify command to verify certificates and attestation report.")]
     Verify(VerifyCmd),
 
     #[structopt(about = "Display command to display files in human readable form.")]
