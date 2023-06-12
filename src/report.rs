@@ -10,13 +10,10 @@ use std::{
     str::FromStr,
 };
 
-use certs::{identify_cert, CertFormat};
+use certs::write_cert;
 use rand::{thread_rng, RngCore};
 
-use sev::firmware::{
-    guest::{AttestationReport, Firmware},
-    host::CertType,
-};
+use sev::firmware::guest::{AttestationReport, Firmware};
 
 // Read a bin-formatted attestation report.
 pub fn read_report(att_report_path: PathBuf) -> Result<AttestationReport, anyhow::Error> {
@@ -177,59 +174,26 @@ pub fn get_report(args: ReportArgs) -> Result<()> {
         }
     };
 
-    // Regular report requested
-    if !args.extended_report {
-        let att_report_path = match args.att_report_path {
-            Some(path) => path,
-            None => PathBuf::from_str("./attestation_report.bin")
-                .context("unable to create default path")?,
-        };
+    // Create attestation report path
+    let att_report_path = match args.att_report_path {
+        Some(path) => path,
+        None => PathBuf::from_str("./attestation_report.bin")
+            .context("unable to create default path")?,
+    };
 
-        // Request report
-        let att_report = sev_fw
+    // Get attestation report from either regular or extended report
+    let att_report = if !args.extended_report {
+        // Request regular report
+        sev_fw
             .get_report(None, Some(request_data), args.vmpl)
-            .context("Failed to get report.")?;
-
-        // Overwrite data if file already exists or create new file
-        let mut attestation_file = if att_report_path.exists() {
-            std::fs::OpenOptions::new()
-                .write(true)
-                .truncate(true)
-                .open(att_report_path)
-                .context("Unable to overwrite attestation report file contents")?
-        } else {
-            fs::File::create(att_report_path)
-                .context("Unable to create attestation report file contents")?
-        };
-        bincode::serialize_into(&mut attestation_file, &att_report)
-            .context("Could not serialize attestation report into file.")?;
+            .context("Failed to get report.")?
 
     // Extended report requested
     } else {
-        let att_report_path = match args.att_report_path {
-            Some(path) => path,
-            None => PathBuf::from_str("./attestation_report.bin")
-                .context("unable to create attestation report default path")?,
-        };
-
         // Request extended attestation report
         let (att_report, certificates) = sev_fw
             .get_ext_report(None, Some(request_data), args.vmpl)
             .context("Failed to get extended report.")?;
-
-        // Overwrite data if file already exists or create new file
-        let mut attestation_file = if att_report_path.exists() {
-            std::fs::OpenOptions::new()
-                .write(true)
-                .truncate(true)
-                .open(att_report_path)
-                .context("Unable to overwrite attestation report file contents")?
-        } else {
-            fs::File::create(att_report_path)
-                .context("Unable to create attestation report file contents")?
-        };
-        bincode::serialize_into(&mut attestation_file, &att_report)
-            .context("Could not serialize attestation report into file.")?;
 
         if certificates.is_empty() {
             return Err(anyhow::anyhow!(
@@ -248,41 +212,29 @@ pub fn get_report(args: ReportArgs) -> Result<()> {
             fs::create_dir(certs_path.clone()).context("Could not create certs folder")?;
         };
 
+        // Write certs into directory
         for cert in certificates.iter() {
-            let mut path = certs_path.clone();
-            // Create file for certipicate depeninding on its type and format
-            let mut f = match cert.cert_type {
-                CertType::ARK => {
-                    match identify_cert(&cert.data[0..27]) {
-                        CertFormat::PEM => path.push("ark.pem"),
-                        CertFormat::DER => path.push("ark.der"),
-                    };
-                    fs::File::create(path).context("unable to create/open ARK file")?
-                }
+            let path = certs_path.clone();
 
-                CertType::ASK => {
-                    match identify_cert(&cert.data[0..27]) {
-                        CertFormat::PEM => path.push("ask.pem"),
-                        CertFormat::DER => path.push("ask.der"),
-                    };
-                    fs::File::create(path).context("unable to create/open VCEK file")?
-                }
-
-                CertType::VCEK => {
-                    match identify_cert(&cert.data[0..27]) {
-                        CertFormat::PEM => path.push("vcek.pem"),
-                        CertFormat::DER => path.push("vcek.der"),
-                    };
-                    fs::File::create(path).context("unable to create/open VCEK file")?
-                }
-
-                _ => continue,
-            };
-            // Write cert contents into file
-            f.write(&cert.data)
-                .context(format!("unable to write data to file {:?}", f))?;
+            write_cert(path, &cert.cert_type, &cert.data)?;
         }
-    }
+
+        att_report
+    };
+
+    // Write attestation report into desired file
+    let mut attestation_file = if att_report_path.exists() {
+        std::fs::OpenOptions::new()
+            .write(true)
+            .truncate(true)
+            .open(att_report_path)
+            .context("Unable to overwrite attestation report file contents")?
+    } else {
+        fs::File::create(att_report_path)
+            .context("Unable to create attestation report file contents")?
+    };
+    bincode::serialize_into(&mut attestation_file, &att_report)
+        .context("Could not serialize attestation report into file.")?;
 
     Ok(())
 }

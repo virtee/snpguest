@@ -4,11 +4,14 @@ use super::*;
 
 use std::{
     fs,
-    io::{ErrorKind, Read},
+    io::{ErrorKind, Read, Write},
     path::PathBuf,
 };
 
-use sev::certs::snp::{ca, Certificate, Chain};
+use sev::{
+    certs::snp::{ca, Certificate, Chain},
+    firmware::host::CertType,
+};
 
 pub struct CertPaths {
     pub ark_path: PathBuf,
@@ -21,7 +24,7 @@ pub enum CertFormat {
 }
 
 // Function to check if certificate is in .der or .pem depending on its contents
-pub fn identify_cert(buf: &[u8]) -> CertFormat {
+fn identify_cert(buf: &[u8]) -> CertFormat {
     // Pem certificates will start with this byte content
     const PEM_START: &[u8] = &[
         45, 45, 45, 45, 45, 66, 69, 71, 73, 78, 32, 67, 69, 82, 84, 73, 70, 73, 67, 65, 84, 69, 45,
@@ -96,4 +99,37 @@ impl TryFrom<CertPaths> for Chain {
             vcek: vcek_cert,
         })
     }
+}
+
+// Function used to write provided cert into desired directory.
+pub fn write_cert(mut path: PathBuf, cert_type: &CertType, data: &Vec<u8>) -> Result<()> {
+    // Get cert type into str
+    let cert_str = match cert_type {
+        CertType::ARK => "ark",
+        CertType::ASK => "ask",
+        CertType::VCEK => "vcek",
+        _ => return Err(anyhow::anyhow!("Invalid cert type")),
+    };
+
+    // Identify cert as either pem or der
+    match identify_cert(&data[0..27]) {
+        CertFormat::PEM => path.push(format!("{}.pem", cert_str)),
+        CertFormat::DER => path.push(format!("{}.der", cert_str)),
+    };
+
+    // Write cert into directory
+    let mut file = if path.exists() {
+        std::fs::OpenOptions::new()
+            .write(true)
+            .truncate(true)
+            .open(path)
+            .context(format!("Unable to overwrite {} cert contents", cert_str))?
+    } else {
+        fs::File::create(path).context(format!("Unable to create {} certificate", cert_str))?
+    };
+
+    file.write(&data)
+        .context(format!("unable to write data to file {:?}", file))?;
+
+    Ok(())
 }

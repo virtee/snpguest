@@ -4,9 +4,13 @@ use super::*;
 
 use core::fmt;
 
-use std::{fs, io::Write, path::PathBuf, str::FromStr};
+use std::{fs, path::PathBuf, str::FromStr};
 
 use reqwest::blocking::{get, Response};
+
+use sev::firmware::host::CertType;
+
+use certs::write_cert;
 
 #[derive(StructOpt)]
 pub enum FetchCmd {
@@ -103,34 +107,11 @@ mod cert_authority {
             fs::create_dir(args.certs_dir.clone()).context("Could not create certs folder")?;
         }
 
-        for i in 0..2 {
-            // Grab cert, 0 is ask and 1 is ark
-            let cert = &certificates[i];
+        let ark_cert = &certificates[1];
+        let ask_cert = &certificates[0];
 
-            let mut curr_path = args.certs_dir.clone();
-            let cert_type = if i.eq(&0) {
-                curr_path.push("ask.pem");
-                "ASK"
-            } else {
-                curr_path.push("ark.pem");
-                "ARK"
-            };
-
-            // If cert already exists on directory overwrite it, if not create it.
-            let mut cert_file = if curr_path.exists() {
-                std::fs::OpenOptions::new()
-                    .write(true)
-                    .truncate(true)
-                    .open(curr_path)
-                    .context(format!("Unable to overwrite {} cert contents", cert_type))?
-            } else {
-                fs::File::create(curr_path)
-                    .context(format!("Unable to create {} file", cert_type))?
-            };
-            cert_file
-                .write(&cert.to_pem()?)
-                .context(format!("unable to write data to file {:?}", cert_file))?;
-        }
+        write_cert(args.certs_dir.clone(), &CertType::ARK, &ark_cert.to_pem()?)?;
+        write_cert(args.certs_dir.clone(), &CertType::ASK, &ask_cert.to_pem()?)?;
 
         Ok(())
     }
@@ -205,22 +186,9 @@ mod vcek {
             fs::create_dir(args.certs_dir.clone()).context("Could not create certs folder")?;
         }
 
-        let mut vcek_path = args.certs_dir.clone();
-        vcek_path.push("vcek.der");
+        let vcek_path = args.certs_dir.clone();
 
-        // If vcek exists in directory, overwrite it, else create a new vcek file.
-        let mut vcek_file = if vcek_path.exists() {
-            std::fs::OpenOptions::new()
-                .write(true)
-                .truncate(true)
-                .open(vcek_path)
-                .context("Unable to overwrite VCEK cert contents")?
-        } else {
-            fs::File::create(vcek_path).context("Unable to create VCEK cert")?
-        };
-        vcek_file
-            .write(&vcek)
-            .context(format!("unable to write data to file {:?}", vcek_file))?;
+        write_cert(vcek_path, &CertType::VCEK, &vcek)?;
 
         Ok(())
     }
@@ -228,7 +196,6 @@ mod vcek {
 
 mod certificates {
     use super::*;
-    use certs::{identify_cert, CertFormat};
     use report::create_random_request;
     use sev::firmware::{
         guest::Firmware,
@@ -316,64 +283,11 @@ mod certificates {
         // Write certificate chain into files
         for cert in certificates.iter() {
             // Generate path from provided certs path
-            let mut path = args.certs_dir.clone();
+            let path = args.certs_dir.clone();
 
-            // Create file for certificate depending on its type and format, or overwrite already existing cert
-            let mut f = match cert.cert_type {
-                CertType::ARK => {
-                    match identify_cert(&cert.data[0..27]) {
-                        CertFormat::PEM => path.push("ark.pem"),
-                        CertFormat::DER => path.push("ark.der"),
-                    };
-                    if path.exists() {
-                        std::fs::OpenOptions::new()
-                            .write(true)
-                            .truncate(true)
-                            .open(path)
-                            .context("Unable to overwrite ARK cert contents")?
-                    } else {
-                        fs::File::create(path).context("Unable to create ARK certificate")?
-                    }
-                }
-
-                CertType::ASK => {
-                    match identify_cert(&cert.data[0..27]) {
-                        CertFormat::PEM => path.push("ask.pem"),
-                        CertFormat::DER => path.push("ask.der"),
-                    };
-                    if path.exists() {
-                        std::fs::OpenOptions::new()
-                            .write(true)
-                            .truncate(true)
-                            .open(path)
-                            .context("Unable to overwrite ASK cert contents")?
-                    } else {
-                        fs::File::create(path).context("Unable to create ASK certificate")?
-                    }
-                }
-
-                CertType::VCEK => {
-                    match identify_cert(&cert.data[0..27]) {
-                        CertFormat::PEM => path.push("vcek.pem"),
-                        CertFormat::DER => path.push("vcek.der"),
-                    };
-                    if path.exists() {
-                        std::fs::OpenOptions::new()
-                            .write(true)
-                            .truncate(true)
-                            .open(path)
-                            .context("Unable to overwrite VCEK cert contents")?
-                    } else {
-                        fs::File::create(path).context("Unable to create VCEK certificate")?
-                    }
-                }
-
-                _ => continue,
-            };
-
-            f.write(&cert.data)
-                .context(format!("unable to write data to file {:?}", f))?;
+            write_cert(path, &cert.cert_type, &cert.data)?;
         }
+
         Ok(())
     }
 }
