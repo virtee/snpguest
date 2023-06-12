@@ -102,7 +102,9 @@ pub struct ReportArgs {
     )]
     pub att_report_path: Option<PathBuf>,
 
-    #[structopt(help = "Directory to store certificates in. Required if requesting an extended-report.")]
+    #[structopt(
+        help = "Directory to store certificates in. Required if requesting an extended-report."
+    )]
     pub certs_dir: Option<PathBuf>,
 }
 
