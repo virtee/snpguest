@@ -24,6 +24,9 @@ pub enum FetchCmd {
         about = "Fetch the complete certificate chain from either the KDS or extended-report (Host Memory)."
     )]
     CERTS(certificates::Args),
+
+    #[structopt(about = "Fetch a unique encryption key from the hardware root of trust.")]
+    KEY(key::Args),
 }
 
 #[derive(Debug, Clone)]
@@ -57,6 +60,7 @@ pub fn cmd(cmd: FetchCmd) -> Result<()> {
         FetchCmd::CA(args) => cert_authority::fetch_ca(args),
         FetchCmd::VCEK(args) => vcek::fetch_vcek(args),
         FetchCmd::CERTS(args) => certificates::fetch_certs(args),
+        FetchCmd::KEY(args) => key::fetch_key(args),
     }
 }
 
@@ -287,6 +291,53 @@ mod certificates {
 
             write_cert(path, &cert.cert_type, &cert.data)?;
         }
+
+        Ok(())
+    }
+}
+
+mod key {
+    use super::*;
+    use sev::firmware::guest::{DerivedKey, Firmware, GuestFieldSelect};
+
+    #[derive(StructOpt)]
+    pub struct Args {
+        #[structopt(
+            long = "key-location",
+            short,
+            help = "Optional: path to attestation report to use to request VCEK (KDS only)"
+        )]
+        pub key_path: Option<PathBuf>,
+    }
+    pub fn fetch_key(args: Args) -> Result<()> {
+        let request = DerivedKey::new(false, GuestFieldSelect(1), 0, 0, 0);
+        let mut sev_fw = Firmware::open().context("failed to open SEV firmware device.")?;
+        let derived_key: [u8; 32] = sev_fw
+            .get_derived_key(None, request)
+            .context("failed to request derived key")?;
+
+        // Create attestation report path
+        let key_path = match args.key_path {
+            Some(path) => path,
+            None => {
+                PathBuf::from_str("./derived_key.bin").context("unable to create default path")?
+            }
+        };
+
+        // Write attestation report into desired file
+        let mut key_file = if key_path.exists() {
+            std::fs::OpenOptions::new()
+                .write(true)
+                .truncate(true)
+                .open(key_path)
+                .context("Unable to overwrite derived key file contents")?
+        } else {
+            fs::File::create(key_path)
+                .context("Unable to create attestation report file contents")?
+        };
+
+        bincode::serialize_into(&mut key_file, &derived_key)
+            .context("Could not serialize attestation report into file.")?;
 
         Ok(())
     }
