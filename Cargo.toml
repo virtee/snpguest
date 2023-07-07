@@ -7,7 +7,7 @@ license = "Apache-2.0"
 homepage = "https://github.com/virtee/snpguest"
 repository = "https://github.com/virtee/snpguest"
 description = "Navigation utility for AMD SEV-SNP guest environment"
-readme = "README"
+readme = "README.md"
 keywords = ["amd", "sev", "sev-snp", "snp"]
 exclude = [ ".gitignore", ".github/*" ]
 
