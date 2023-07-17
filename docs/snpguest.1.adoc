@@ -26,69 +26,59 @@ GLOBAL OPTIONS
 COMMANDS
 --------
 *snpguest report*::
-    usage: snpguest report [-e, --extended-report] [-r, --random] [-v, --vmpl] $VMPL [-d, --request-data] $REQUEST_FILE [-a, --att-report] $ATT_REPORT_PATH $CERTS_PATH
+    usage: snpguest report $ATT_REPORT_PATH $REQUEST_FILE [-v, --vmpl] $VMPL [-r, --random]
     
     Requests an attestation report from the host and writes it in a file with the provided request data and vmpl. 
     Will write the contents of the attestation report in binary format into the specified report path.
-    If no path is provided for the attestation report, the path will default to current directory ("./attestation_report.bin").
-    User can pass 64 bytes of data in any file format into --request-data in order to use that data to request the attestation report.
-    The user can use the --random flag to generate and use random data for request data. 
-    If the user provides a path using --request-data and also uses the --random flag, random data will be written into the provided file path.
-    If the user uses the --random flag with no --request-data flag, then the data will be written into the default file in current directory ("./random-request-file.txt").
-    VMPL defaults to 1.
-    To request an extended-report, use the --extended-report flag.
-    Extended-report stores the attestation report and also fetches the certificates stored by host in memory.
-    If the --extended-report flag is used, the user needs to provide a path to the directory in which the certs will be stored.
-    The certificates will be cycled through and placed into the specified directory.
-    If no certs path is provided, an error will be raised.
-    The certs will be stored in the same format as they were loaded by host (".pem" or ".der").
-    If the certificates already exist in the provided directory, they will be overwritten.
-
+    A path for the attestation report must be provided.
+    User can pass 64 bytes of data in any file format into $REQUEST_FILE in order to use that data to request the attestation report.
+    The user can use the --random flag to generate and use random data for request data.
+    If the user uses the --random flag, then the data will be written into the file they provided in $REQUEST_FILE.
+    VMPL is an optional parameter and it defaults to 1.
+    
     options:
     -h, --help  show a help message
-    -e, --extended  request an extended report
-    -r, --random  generate 64 random bytes of data to pass for the report request
+    -r, --random  Generate 64 random bytes of data to pass for the report request
+    -v, --vmpl Specify a different vmpl level for the attestation report (defaults to 1)
+
+*snpguest certificates*::
+    usage: snpguest certificates $ENCODING $CERTS_DIR
+    
+    Requests the certificate chain (ASK, ARK & VCEK) from host memory (requests extended-config).
+    The user needs to specify the certificate encoding they would like store the certs in [PEM | DER].
+    Currently only PEM and DER encondings are supported.
+    All of the certs will be in the same encoding.
+    The user also needs to provide the path to the directory where the certs will be stored.
+    If the certificate already exists in the provided directory, it will be overwritten.
+    The attestation report will be ingored for this request, to request and store an attestation report use the "report" command.
+    
+    options:
+    -h, --help  show a help message
 
 *snpguest fetch ca*::
-    usage: snpguest fetch ca $CERTS_DIR $PROCESSOR_MODEL
+    usage: snpguest fetch ca $ENCODING $PROCESSOR_MODEL $CERTS_DIR
 
     Requests the certificate authority chain (ARK & ASK) from the KDS.
-    The user must specify their host processor model.
+    The user needs to specify the certificate encoding they would like store the certs in [PEM | DER].
+    Currently only PEM and DER encondings are supported.
+    Both of the certs will be in the same encoding.
+    The user must specify their host processor model [Milan | Genoa].
     The user needs to provide the path to the directory where the certs will be stored.
-    Both certificates will be written in ".pem" format.
     If the certificates already exist in the provided directory, they will be overwritten.
 
     options:
     -h, --help show a help message
 
 *snpguest fetch vcek*::
-    usage: snpguest fetch vcek $CERTS_DIR $PROCESSOR_MODEL [-a, --att-report] $ATT_REPORT_PATH
+    usage: snpguest fetch vcek $ENCODING $PROCESSOR_MODEL $CERTS_DIR $ATT_REPORT_PATH
 
     Requests the VCEK certificate from the KDS.
-    The user must specify their host processor model.
+    The user needs to specify the certificate encoding they would like store the cert in [PEM | DER].
+    Currently only PEM and DER encondings are supported.
+    The user must specify their host processor model [Milan | Genoa].
     The user needs to provide the path to the directory where the VCEK will be stored.
-    If no path is provided for the attestation report, the program will request one with default parameter values and random request data.
-    The attestation report won't be stored, and will only be used for the request.
-    The certificate will be written into the provided directory.
-    The VCEK will be written in ".der" format.
     If the certificate already exists in the provided directory, it will be overwritten.
-
-    options:
-    -h, --help show a help message
-
-*snpguest fetch certs*::
-    usage: snpguest fetch certs [-e, --extended-report] $CERTS_DIR $PROCESSOR_MODEL [-a, --att-report] $ATT_REPORT_PATH
-
-    Requests the complete certificate chain (ASK, ARK & VCEK) from either the KDS or the host memory.
-    If the --extended-report is used, then the certificates will be pulled from the host memory, if not it will default to the kds.
-    The user must specify their host processor model for the kds request.
-    The user needs to provide the path to the directory where the certs will be stored.
-    If no path is provided for the attestation report for the kds request, the program will request one with default parameter values and random request data.
-    The attestation report won't be stored for either request type.
-    The certificates will be written into the provided directory.
-    If --extended-report is used then the certs will be stored in the same format as they were loaded by host (".pem" or ".der").
-    If the request is made through the kds, the ASK and the ARK will be stored in ".pem" and the VCEK in ".der".
-    If the certificate already exists in the provided directory, it will be overwritten.
+    The user also needs to provide the path to a stored attestation report that will be used to request the VCEK.
 
     options:
     -h, --help show a help message
@@ -103,36 +93,26 @@ COMMANDS
     options:
     -h, --help show a help message
 
-*snpguest verify tcb*::
-    usage: snpguest verify tcb $CERTS_DIR [-a, --att-report] $ATT_REPORT_PATH
+*snpguest verify attestation*::
+    usage: snpguest verify attestation $CERTS_DIR $ATT_REPORT_PATH [-t, --tcb] [-s, --signature]
 
-    Verifies the trusted compute base using an attestation report and VCEK certificate.
-    The user needs to provide a path to the directory containing the VCEK certificate.
-    If no path is provided for the attestation report, the program will request one with default parameter values and random request data.
-    The attestation report won't be stored, and will only be used for the verification.
-    Error will be raised if there is any mismatch between the report TCB and the VCEK TCB contents.
-
-    options:
-    -h, --help show a help message
-
-*snpguest verify signature*::
-    usage: snpguest verify signature $CERTS_DIR [-a, --att-report] $ATT_REPORT_PATH
-
-    Verifies that the provided attestation report was signed by the VCEK.
-    The user needs to provide a path to the directory containing the VCEK certificate.
-    If no path is provided for the attestation report, the program will request one with default parameter values and random request data.
-    The attestation report won't be stored, and will only be used for the verification.
-    Error will be raised if the signature in the attestation report does not match the VCEK public key.
+    Verifies the contents of the Attestation Report using the VCEK certificate.
+    The user needs to provide the path to the directory containing the VCEK certificate.
+    The user also needs to provide the path to a stored attestation report to be verified.
+    Error will be raised if the attestation verification fails at any point.
+    The user can use the [-t, --tcb] flag to only validate the tcb contents of the report.
+    The user can use the [-s, --signature] flag to only validate the report signature.
 
     options:
     -h, --help show a help message
+    -t, --tcb verify the tcb section of the report only
+    -s, --signature verify the signature of the report only
 
 *snpguest guest display report*::
-    usage: snpguest display report [-a, --att-report] $ATT_REPORT_PATH
+    usage: snpguest display report $ATT_REPORT_PATH
 
     Prints the attestation report contents into terminal.
-    If no path is provided for the attestation report, the program will request one with default parameter values and random request data.
-    The attestation report won't be stored, and will only be displayed.
+    The user has to provide a path to a stored attestation report to display.
 
     options:
     -h, --help show a help message

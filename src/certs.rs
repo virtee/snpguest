@@ -6,21 +6,41 @@ use std::{
     fs,
     io::{ErrorKind, Read, Write},
     path::PathBuf,
+    str::FromStr,
 };
 
 use sev::{
     certs::snp::{ca, Certificate, Chain},
-    firmware::host::CertType,
+    firmware::{guest::Firmware, host::CertType},
 };
+
+use openssl::x509::X509;
+
+use report;
 
 pub struct CertPaths {
     pub ark_path: PathBuf,
     pub ask_path: PathBuf,
     pub vcek_path: PathBuf,
 }
+#[derive(StructOpt, Clone, Copy)]
 pub enum CertFormat {
+    #[structopt(about = "Certificates are encoded in PEM format.")]
     PEM,
+
+    #[structopt(about = "Certificates are encoded in DER format.")]
     DER,
+}
+
+impl FromStr for CertFormat {
+    type Err = anyhow::Error;
+    fn from_str(input: &str) -> Result<CertFormat, anyhow::Error> {
+        match input.to_lowercase().as_str() {
+            "pem" => Ok(CertFormat::PEM),
+            "der" => Ok(CertFormat::DER),
+            _ => Err(anyhow::anyhow!("Invalid Cert Format!")),
+        }
+    }
 }
 
 // Function to check if certificate is in .der or .pem depending on its contents
@@ -101,8 +121,31 @@ impl TryFrom<CertPaths> for Chain {
     }
 }
 
+fn translate_cert(data: &Vec<u8>, cert_encoding: CertFormat) -> Vec<u8> {
+    let translated_cert = match cert_encoding {
+        CertFormat::PEM => {
+            let temp_cert = X509::from_pem(data).expect("Failed to parse the certificate");
+            temp_cert
+                .to_der()
+                .expect("Failed to convert to DER encoding")
+        }
+        CertFormat::DER => {
+            let temp_cert = X509::from_der(data).expect("Failed to parse the certificate");
+            temp_cert
+                .to_pem()
+                .expect("Failed to convert to DER encoding")
+        }
+    };
+    translated_cert
+}
+
 // Function used to write provided cert into desired directory.
-pub fn write_cert(mut path: PathBuf, cert_type: &CertType, data: &Vec<u8>) -> Result<()> {
+pub fn write_cert(
+    mut path: PathBuf,
+    cert_type: &CertType,
+    data: &Vec<u8>,
+    encoding: CertFormat,
+) -> Result<()> {
     // Get cert type into str
     let cert_str = match cert_type {
         CertType::ARK => "ark",
@@ -113,8 +156,20 @@ pub fn write_cert(mut path: PathBuf, cert_type: &CertType, data: &Vec<u8>) -> Re
 
     // Identify cert as either pem or der
     match identify_cert(&data[0..27]) {
-        CertFormat::PEM => path.push(format!("{}.pem", cert_str)),
-        CertFormat::DER => path.push(format!("{}.der", cert_str)),
+        CertFormat::PEM => match encoding {
+            CertFormat::PEM => path.push(format!("{}.pem", cert_str)),
+            CertFormat::DER => {
+                translate_cert(data, CertFormat::PEM);
+                path.push(format!("{}.der", cert_str));
+            }
+        },
+        CertFormat::DER => match encoding {
+            CertFormat::DER => path.push(format!("{}.der", cert_str)),
+            CertFormat::PEM => {
+                translate_cert(data, CertFormat::DER);
+                path.push(format!("{}.pem", cert_str));
+            }
+        },
     };
 
     // Write cert into directory
@@ -130,6 +185,50 @@ pub fn write_cert(mut path: PathBuf, cert_type: &CertType, data: &Vec<u8>) -> Re
 
     file.write(&data)
         .context(format!("unable to write data to file {:?}", file))?;
+
+    Ok(())
+}
+
+#[derive(StructOpt)]
+pub struct CertificatesArgs {
+    #[structopt(help = "Specify encoding to use for certificates. [PEM | DER]")]
+    pub encoding: CertFormat,
+
+    #[structopt(
+        help = "Directory to store certificates in. Required if requesting an extended-report."
+    )]
+    pub certs_dir: PathBuf,
+}
+
+pub fn get_ext_certs(args: CertificatesArgs) -> Result<()> {
+    let mut sev_fw: Firmware = Firmware::open().context("failed to open SEV firmware device.")?;
+
+    // Generate random request data
+    let request_data = report::create_random_request();
+
+    // Request extended attestation report
+    let (_, certificates) = sev_fw
+        .get_ext_report(None, Some(request_data), None)
+        .context("Failed to get extended report.")?;
+
+    // Check if the returned table is empty
+    if certificates.is_empty() {
+        return Err(anyhow::anyhow!(
+            "The certificate chain is empty! Certificates probably not loaded by the host."
+        ));
+    }
+
+    // Create certificate directory if missing
+    if !args.certs_dir.exists() {
+        fs::create_dir(args.certs_dir.clone()).context("Could not create certs folder")?;
+    };
+
+    // Write certs into directory
+    for cert in certificates.iter() {
+        let path = args.certs_dir.clone();
+
+        write_cert(path, &cert.cert_type, &cert.data, args.encoding)?;
+    }
 
     Ok(())
 }
