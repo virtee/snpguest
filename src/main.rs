@@ -6,6 +6,8 @@ mod fetch;
 mod report;
 mod verify;
 
+mod hyperv;
+
 use certs::CertificatesArgs;
 use display::DisplayCmd;
 use fetch::FetchCmd;
@@ -51,6 +53,7 @@ fn main() -> Result<()> {
     env_logger::init();
 
     let snpguest = SnpGuest::from_args();
+    let hv = hyperv::present();
 
     let status = match snpguest.cmd {
         SnpGuestCmd::Report(args) => report::get_report(args),
