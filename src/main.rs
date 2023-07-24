@@ -6,6 +6,7 @@ mod fetch;
 mod report;
 mod verify;
 
+use certs::CertificatesArgs;
 use display::DisplayCmd;
 use fetch::FetchCmd;
 use report::ReportArgs;
@@ -30,13 +31,16 @@ struct SnpGuest {
 #[derive(StructOpt)]
 #[structopt(author = AUTHORS, version = VERSION, about = "Utilities for managing the SNP Guest environment")]
 enum SnpGuestCmd {
-    #[structopt(about = "Report command to request attestation report.")]
+    #[structopt(about = "Report command to request an attestation report.")]
     Report(ReportArgs),
 
-    #[structopt(about = "Fetch command to request certificates from KDS.")]
+    #[structopt(about = "Certificates command to request cached certificates from the AMD PSP")]
+    Certificates(CertificatesArgs),
+
+    #[structopt(about = "Fetch command to request certificates.")]
     Fetch(FetchCmd),
 
-    #[structopt(about = "Verify command to verify certificates and attestation report")]
+    #[structopt(about = "Verify command to verify certificates and attestation report.")]
     Verify(VerifyCmd),
 
     #[structopt(about = "Display command to display files in human readable form.")]
@@ -50,6 +54,7 @@ fn main() -> Result<()> {
 
     let status = match snpguest.cmd {
         SnpGuestCmd::Report(args) => report::get_report(args),
+        SnpGuestCmd::Certificates(args) => certs::get_ext_certs(args),
         SnpGuestCmd::Fetch(subcmd) => fetch::cmd(subcmd),
         SnpGuestCmd::Verify(subcmd) => verify::cmd(subcmd, snpguest.quiet),
         SnpGuestCmd::Display(subcmd) => display::cmd(subcmd, snpguest.quiet),
