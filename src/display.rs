@@ -1,8 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use super::*;
-
-use report;
 use std::path::PathBuf;
 
 #[derive(StructOpt)]

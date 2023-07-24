@@ -27,7 +27,7 @@ pub fn read_report(att_report_path: PathBuf) -> Result<AttestationReport, anyhow
 pub fn create_random_request() -> [u8; 64] {
     let mut data = [0u8; 64];
     thread_rng().fill_bytes(&mut data);
-    return data;
+   data
 }
 
 // Write data into given file. Split it into 16 byte lines.
@@ -36,7 +36,7 @@ pub fn write_hex<W: Write>(file: &mut BufWriter<W>, data: &[u8]) -> Result<()> {
     for val in data {
         // Make it blocks for easier read
         if line_counter.eq(&16) {
-            write!(file, "\n").context("Failed to write data to file")?;
+            writeln!(file).context("Failed to write data to file")?;
             line_counter = 0;
         }
         // Write byte into file

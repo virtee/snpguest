@@ -18,7 +18,7 @@ pub enum FetchCmd {
     CA(cert_authority::Args),
 
     #[structopt(about = "Fetch the VCEK from the KDS.")]
-    VCEK(vcek::Args),
+    Vcek(vcek::Args),
 }
 
 #[derive(Debug, Clone)]
@@ -50,7 +50,7 @@ impl fmt::Display for ProcType {
 pub fn cmd(cmd: FetchCmd) -> Result<()> {
     match cmd {
         FetchCmd::CA(args) => cert_authority::fetch_ca(args),
-        FetchCmd::VCEK(args) => vcek::fetch_vcek(args),
+        FetchCmd::Vcek(args) => vcek::fetch_vcek(args),
     }
 }
 
@@ -81,7 +81,7 @@ mod cert_authority {
         // Should make -> https://kdsintf.amd.com/vcek/v1/{SEV_PROD_NAME}/cert_chain
         let url: String = format!("{KDS_CERT_SITE}{KDS_VCEK}/{processor_model}/{KDS_CERT_CHAIN}");
 
-        let rsp: Response = get(&url).context("Could not get certs from URL")?;
+        let rsp: Response = get(url).context("Could not get certs from URL")?;
 
         // Parse response
         let body = rsp
@@ -111,13 +111,13 @@ mod cert_authority {
             args.certs_dir.clone(),
             &CertType::ARK,
             &ark_cert.to_pem()?,
-            args.encoding.clone(),
+            args.encoding,
         )?;
         write_cert(
             args.certs_dir.clone(),
             &CertType::ASK,
             &ask_cert.to_pem()?,
-            args.encoding.clone(),
+            args.encoding,
         )?;
 
         Ok(())
@@ -161,7 +161,7 @@ mod vcek {
         };
 
         // Use attestation report to get data for URL
-        let hw_id: String = hex::encode(&att_report.chip_id);
+        let hw_id: String = hex::encode(att_report.chip_id);
 
         let vcek_url: String = format!(
             "{KDS_CERT_SITE}{KDS_VCEK}/{processor_model}/\
@@ -173,7 +173,7 @@ mod vcek {
         );
 
         // VCEK in DER format
-        let vcek_rsp = get(&vcek_url).context("Could not get VCEK from URL")?;
+        let vcek_rsp = get(vcek_url).context("Could not get VCEK from URL")?;
 
         let vcek_rsp_bytes = vcek_rsp.bytes().context("Unable to parse VCEK")?.to_vec();
 

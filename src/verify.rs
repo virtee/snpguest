@@ -6,32 +6,31 @@ use certs::{convert_path_to_cert, CertPaths};
 
 use std::{io::ErrorKind, path::PathBuf};
 
-use anyhow;
 use openssl::{ecdsa::EcdsaSig, sha::Sha384};
 use sev::certs::snp::Chain;
 
 #[derive(StructOpt)]
 pub enum VerifyCmd {
     #[structopt(about = "Verify the certificate chain.")]
-    CERTS(certificate_chain::Args),
+    Certs(certificate_chain::Args),
 
     #[structopt(about = "Verify the attestation report.")]
-    ATTESTATION(attestation::Args),
+    Attestation(attestation::Args),
 }
 
 pub fn cmd(cmd: VerifyCmd, quiet: bool) -> Result<()> {
     match cmd {
-        VerifyCmd::CERTS(args) => certificate_chain::validate_cc(args, quiet),
-        VerifyCmd::ATTESTATION(args) => attestation::verify_attesation(args, quiet),
+        VerifyCmd::Certs(args) => certificate_chain::validate_cc(args, quiet),
+        VerifyCmd::Attestation(args) => attestation::verify_attesation(args, quiet),
     }
 }
 
 // Find a certificate in specified directory according to its extension
 pub fn find_cert_in_dir(dir: PathBuf, cert: &str) -> Result<PathBuf, anyhow::Error> {
-    if PathBuf::from(dir.join(format!("{cert}.pem"))).exists() {
-        Ok(PathBuf::from(dir.join(format!("{cert}.pem"))))
-    } else if PathBuf::from(dir.join(format!("{cert}.der"))).exists() {
-        Ok(PathBuf::from(dir.join(format!("{cert}.der"))))
+    if dir.join(format!("{cert}.pem")).exists() {
+        Ok(dir.join(format!("{cert}.pem")))
+    } else if dir.join(format!("{cert}.der")).exists() {
+        Ok(dir.join(format!("{cert}.der")))
     } else {
         return Err(anyhow::anyhow!("{cert} certificate not found in directory"));
     }
@@ -56,9 +55,9 @@ mod certificate_chain {
 
         // Get a cert chain from directory
         let cert_chain: Chain = CertPaths {
-            ark_path: ark_path,
-            ask_path: ask_path,
-            vcek_path: vcek_path,
+            ark_path,
+            ask_path,
+            vcek_path,
         }
         .try_into()?;
 
