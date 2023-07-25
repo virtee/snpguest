@@ -68,7 +68,7 @@ pub fn present() -> bool {
 pub mod report {
     use super::*;
 
-    use anyhow::Context;
+    use anyhow::{anyhow, Context};
     use serde::{Deserialize, Serialize};
     use sev::firmware::guest::AttestationReport;
     use tss_esapi::{
@@ -88,7 +88,10 @@ pub mod report {
         rsv2: [u32; 5],
     }
 
-    pub fn get() -> Result<AttestationReport> {
+    pub fn get(vmpl: u32) -> Result<AttestationReport> {
+        if vmpl > 0 {
+            return Err(anyhow!("Azure vTPM attestation report requires VMPL 0"));
+        }
         let bytes = tpm2_read().context("unable to read attestation report bytes from vTPM")?;
 
         hcl_report(&bytes)

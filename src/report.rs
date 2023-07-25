@@ -104,7 +104,7 @@ pub fn get_report(args: ReportArgs, hv: bool) -> Result<()> {
 
     // Get attestation report
     let att_report = if hv {
-        hyperv::report::get()?
+        hyperv::report::get(args.vmpl.unwrap_or(0))?
     } else {
         let mut sev_fw: Firmware =
             Firmware::open().context("failed to open SEV firmware device.")?;
