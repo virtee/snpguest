@@ -27,3 +27,4 @@ hex = "0.4"
 x509-parser = { version="^0.14", features=["verify"] }
 asn1-rs = "*"
 rand = "*"
+tss-esapi = "7.2"
