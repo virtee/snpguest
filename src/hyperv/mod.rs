@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
+use super::*;
+
 use std::arch::x86_64::__cpuid;
 
 const CPUID_HYPERV_SIG: &str = "Microsoft Hv";
@@ -46,4 +48,51 @@ pub fn present() -> bool {
     }
 
     true
+}
+
+pub mod report {
+    use super::*;
+
+    use anyhow::Context;
+    use serde::{Deserialize, Serialize};
+    use sev::firmware::guest::AttestationReport;
+    use tss_esapi::{
+        abstraction::nv,
+        handles::NvIndexTpmHandle,
+        interface_types::{resource_handles::NvAuth, session_handles::AuthSession},
+        tcti_ldr::{DeviceConfig, TctiNameConf},
+    };
+
+    const VTPM_HCL_REPORT_NV_INDEX: u32 = 0x01400001;
+
+    #[repr(C)]
+    #[derive(Deserialize, Serialize, Debug, Clone, Copy)]
+    struct Hcl {
+        rsv1: [u32; 8],
+        report: AttestationReport,
+        rsv2: [u32; 5],
+    }
+
+    pub fn get() -> Result<AttestationReport> {
+        let bytes = tpm2_read().context("unable to read attestation report bytes from vTPM")?;
+
+        hcl_report(&bytes)
+    }
+
+    fn tpm2_read() -> Result<Vec<u8>> {
+        let handle = NvIndexTpmHandle::new(VTPM_HCL_REPORT_NV_INDEX)
+            .context("unable to initialize TPM handle")?;
+        let mut ctx = tss_esapi::Context::new(TctiNameConf::Device(DeviceConfig::default()))?;
+        ctx.set_sessions((Some(AuthSession::Password), None, None));
+
+        nv::read_full(&mut ctx, NvAuth::Owner, handle)
+            .context("unable to read non-volatile vTPM data")
+    }
+
+    fn hcl_report(bytes: &[u8]) -> Result<AttestationReport> {
+        let hcl: Hcl =
+            bincode::deserialize(bytes).context("unable to deserialize bytes from vTPM")?;
+
+        Ok(hcl.report)
+    }
 }

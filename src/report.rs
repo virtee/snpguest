@@ -72,9 +72,7 @@ pub struct ReportArgs {
 }
 
 // Request attestation report and write it into a file
-pub fn get_report(args: ReportArgs) -> Result<()> {
-    let mut sev_fw: Firmware = Firmware::open().context("failed to open SEV firmware device.")?;
-
+pub fn get_report(args: ReportArgs, hv: bool) -> Result<()> {
     let request_data = match args.random {
         true => {
             let request_buf = create_random_request();
@@ -105,9 +103,15 @@ pub fn get_report(args: ReportArgs) -> Result<()> {
     };
 
     // Get attestation report
-    let att_report = sev_fw
-        .get_report(None, Some(request_data), args.vmpl)
-        .context("Failed to get report.")?;
+    let att_report = if hv {
+        hyperv::report::get()?
+    } else {
+        let mut sev_fw: Firmware =
+            Firmware::open().context("failed to open SEV firmware device.")?;
+        sev_fw
+            .get_report(None, Some(request_data), args.vmpl)
+            .context("Failed to get report.")?
+    };
 
     // Write attestation report into desired file
     let mut attestation_file = if args.att_report_path.exists() {
