@@ -19,15 +19,14 @@ mod report_display {
 
     #[derive(StructOpt)]
     pub struct Args {
-        #[structopt(
-            help = "Path to attestation report to display."
-        )]
+        #[structopt(help = "Path to attestation report to display.")]
         pub att_report_path: PathBuf,
     }
 
     // Print attestation report in console
     pub fn display_attestation_report(args: Args, quiet: bool) -> Result<()> {
-        let att_report = report::read_report(args.att_report_path).context("Could not open attestation report")?;
+        let att_report = report::read_report(args.att_report_path)
+            .context("Could not open attestation report")?;
 
         if !quiet {
             println!("{}", att_report);

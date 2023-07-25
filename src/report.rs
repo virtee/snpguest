@@ -27,7 +27,7 @@ pub fn read_report(att_report_path: PathBuf) -> Result<AttestationReport, anyhow
 pub fn create_random_request() -> [u8; 64] {
     let mut data = [0u8; 64];
     thread_rng().fill_bytes(&mut data);
-   data
+    data
 }
 
 // Write data into given file. Split it into 16 byte lines.
@@ -79,29 +79,29 @@ pub fn get_report(args: ReportArgs) -> Result<()> {
         true => {
             let request_buf = create_random_request();
 
-                // Overwrite data if file already exists
-                let request_file = if args.request_file.exists() {
-                    std::fs::OpenOptions::new()
-                        .write(true)
-                        .truncate(true)
-                        .open(args.request_file)
-                        .context("Unable to overwrite request file contents")?
-                } else {
-                    fs::File::create(args.request_file).context("Unable to create request file.")?
-                };
-                write_hex(&mut BufWriter::new(request_file), &request_buf)
-                    .context("Failed to write request data in request file")?;
-                request_buf
-        },
+            // Overwrite data if file already exists
+            let request_file = if args.request_file.exists() {
+                std::fs::OpenOptions::new()
+                    .write(true)
+                    .truncate(true)
+                    .open(args.request_file)
+                    .context("Unable to overwrite request file contents")?
+            } else {
+                fs::File::create(args.request_file).context("Unable to create request file.")?
+            };
+            write_hex(&mut BufWriter::new(request_file), &request_buf)
+                .context("Failed to write request data in request file")?;
+            request_buf
+        }
         false => {
             let mut request_file =
-                    File::open(args.request_file).context("Could not open the report request file.")?;
-                let mut request_buf: [u8; 64] = [0; 64];
-                request_file
-                    .read(&mut request_buf)
-                    .context("Could not read report request file.")?;
-                request_buf
-        }   
+                File::open(args.request_file).context("Could not open the report request file.")?;
+            let mut request_buf: [u8; 64] = [0; 64];
+            request_file
+                .read(&mut request_buf)
+                .context("Could not read report request file.")?;
+            request_buf
+        }
     };
 
     // Get attestation report
