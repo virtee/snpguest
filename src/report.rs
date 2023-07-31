@@ -3,14 +3,13 @@
 use super::*;
 
 use std::{
-    fs,
-    fs::File,
-    io::{BufWriter, Read, Write},
+    fs::{self, File, OpenOptions},
+    io::{Read, Write},
     path::PathBuf,
 };
 
+use anyhow::{anyhow, Result};
 use rand::{thread_rng, RngCore};
-
 use sev::firmware::guest::{AttestationReport, Firmware};
 
 // Read a bin-formatted attestation report.
@@ -28,22 +27,6 @@ pub fn create_random_request() -> [u8; 64] {
     let mut data = [0u8; 64];
     thread_rng().fill_bytes(&mut data);
     data
-}
-
-// Write data into given file. Split it into 16 byte lines.
-pub fn write_hex<W: Write>(file: &mut BufWriter<W>, data: &[u8]) -> Result<()> {
-    let mut line_counter = 0;
-    for val in data {
-        // Make it blocks for easier read
-        if line_counter.eq(&16) {
-            writeln!(file).context("Failed to write data to file")?;
-            line_counter = 0;
-        }
-        // Write byte into file
-        write!(file, "{:02x}", val).context("Failed to write data to file")?;
-        line_counter += 1;
-    }
-    Ok(())
 }
 
 #[derive(StructOpt)]
@@ -69,63 +52,114 @@ pub struct ReportArgs {
         help = "Provide file with data for attestation-report request. If provided with random flag, then the random data will be written in the provided path."
     )]
     pub request_file: PathBuf,
+
+    #[structopt(
+        long,
+        short,
+        help = "Expect that the 64-byte report data will already be provided by the platform provider."
+    )]
+    pub platform: bool,
+}
+
+impl ReportArgs {
+    pub fn verify(&self, hyperv: bool) -> Result<()> {
+        if self.random && self.platform {
+            return Err(anyhow!(
+                "--random and --platform both enabled (not allowed). Consult man page."
+            ));
+        }
+
+        if self.random && hyperv {
+            return Err(anyhow!(
+                "--random enabled yet Hyper-V guest detected (not allowed). Consult man page."
+            ));
+        }
+
+        if self.platform && !hyperv {
+            return Err(anyhow!("--platform enabled yet Hyper-V guest not detected (not allowed). Consult man page."));
+        }
+
+        Ok(())
+    }
 }
 
 // Request attestation report and write it into a file
 pub fn get_report(args: ReportArgs, hv: bool) -> Result<()> {
-    let request_data = match args.random {
-        true => {
-            let request_buf = create_random_request();
+    args.verify(hv)?;
 
-            // Overwrite data if file already exists
-            let request_file = if args.request_file.exists() {
-                std::fs::OpenOptions::new()
-                    .write(true)
-                    .truncate(true)
-                    .open(args.request_file)
-                    .context("Unable to overwrite request file contents")?
-            } else {
-                fs::File::create(args.request_file).context("Unable to create request file.")?
-            };
-            write_hex(&mut BufWriter::new(request_file), &request_buf)
-                .context("Failed to write request data in request file")?;
-            request_buf
-        }
-        false => {
-            let mut request_file =
-                File::open(args.request_file).context("Could not open the report request file.")?;
-            let mut request_buf: [u8; 64] = [0; 64];
-            request_file
-                .read(&mut request_buf)
-                .context("Could not read report request file.")?;
-            request_buf
-        }
+    let data: Option<[u8; 64]> = if args.random {
+        Some(create_random_request())
+    } else if args.platform {
+        None
+    } else {
+        /*
+         * Read from the request file.
+         */
+        let mut bytes = [0u8; 64];
+        let mut file = File::open(&args.request_file)?;
+        file.read_exact(&mut bytes)
+            .context("unable to read 64 bytes from REQUEST_FILE")?;
+
+        Some(bytes)
     };
 
-    // Get attestation report
-    let att_report = if hv {
+    let report = if hv {
         hyperv::report::get(args.vmpl.unwrap_or(0))?
     } else {
-        let mut sev_fw: Firmware =
-            Firmware::open().context("failed to open SEV firmware device.")?;
-        sev_fw
-            .get_report(None, Some(request_data), args.vmpl)
-            .context("Failed to get report.")?
+        let mut fw = Firmware::open().context("unable to open /dev/sev")?;
+        fw.get_report(None, data, args.vmpl)
+            .context("unable to fetch attestation report")?
     };
 
-    // Write attestation report into desired file
-    let mut attestation_file = if args.att_report_path.exists() {
-        std::fs::OpenOptions::new()
-            .write(true)
-            .truncate(true)
-            .open(args.att_report_path)
-            .context("Unable to overwrite attestation report file contents")?
-    } else {
-        fs::File::create(args.att_report_path)
-            .context("Unable to create attestation report file contents")?
-    };
-    bincode::serialize_into(&mut attestation_file, &att_report)
-        .context("Could not serialize attestation report into file.")?;
+    /*
+     * Serialize and write attestation report.
+     */
+    let mut file = OpenOptions::new()
+        .create(true)
+        .truncate(true)
+        .write(true)
+        .open(&args.att_report_path)?;
 
+    write!(&mut file, "{}", report).context(format!(
+        "unable to write attestation report to {}",
+        args.att_report_path.display()
+    ))?;
+
+    /*
+     * Write reports report data (only for --random or --platform).
+     */
+    if args.random {
+        reqdata_write(args.request_file, &report).context("unable to write random request data")?;
+    } else if args.platform {
+        reqdata_write(args.request_file, &report)
+            .context("unable to write platform request data")?;
+    }
+
+    Ok(())
+}
+
+fn reqdata_write(name: PathBuf, report: &AttestationReport) -> Result<()> {
+    let mut file = OpenOptions::new()
+        .create(true)
+        .truncate(true)
+        .write(true)
+        .open(name)
+        .context("unable to create or write to request data file")?;
+
+    write_hex(&mut file, &report.report_data).context("unable to write report data to REQUEST_FILE")
+}
+
+pub fn write_hex(file: &mut File, data: &[u8]) -> Result<()> {
+    let mut line_counter = 0;
+    for val in data {
+        // Make it blocks for easier read
+        if line_counter.eq(&16) {
+            writeln!(file)?;
+            line_counter = 0;
+        }
+
+        write!(file, "{:02x}", val)?;
+        line_counter += 1;
+    }
     Ok(())
 }
