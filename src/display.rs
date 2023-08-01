@@ -1,8 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use super::*;
-
-use report;
 use std::path::PathBuf;
 
 #[derive(StructOpt)]
@@ -22,26 +20,14 @@ mod report_display {
     #[derive(StructOpt)]
     pub struct Args {
         #[structopt(
-            long = "att-report",
-            short,
-            help = "Optional: path to attestation report to display."
+            help = "Path to attestation report to display."
         )]
-        pub att_report_path: Option<PathBuf>,
+        pub att_report_path: PathBuf,
     }
 
     // Print attestation report in console
     pub fn display_attestation_report(args: Args, quiet: bool) -> Result<()> {
-        let att_report = match args.att_report_path {
-            Some(path) => {
-                // Check that provided path contains an attestation report
-                if !path.exists() {
-                    return Err(anyhow::anyhow!("No attestation report was found. Provide an attestation report to request VCEK from the KDS."));
-                }
-                report::read_report(path).context("Could not open attestation report")?
-            }
-            // No path provieded, request an attestation report with default values and random data
-            None => report::request_default_report()?,
-        };
+        let att_report = report::read_report(args.att_report_path).context("Could not open attestation report")?;
 
         if !quiet {
             println!("{}", att_report);

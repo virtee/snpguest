@@ -10,7 +10,7 @@ use reqwest::blocking::{get, Response};
 
 use sev::firmware::host::CertType;
 
-use certs::write_cert;
+use certs::{write_cert, CertFormat};
 
 #[derive(StructOpt)]
 pub enum FetchCmd {
@@ -18,15 +18,10 @@ pub enum FetchCmd {
     CA(cert_authority::Args),
 
     #[structopt(about = "Fetch the VCEK from the KDS.")]
-    VCEK(vcek::Args),
-
-    #[structopt(
-        about = "Fetch the complete certificate chain from either the KDS or extended-report (Host Memory)."
-    )]
-    CERTS(certificates::Args),
+    Vcek(vcek::Args),
 
     #[structopt(about = "Fetch a unique encryption key from the hardware root of trust.")]
-    KEY(key::Args),
+    Key(key::Args),
 }
 
 #[derive(Debug, Clone)]
@@ -58,9 +53,8 @@ impl fmt::Display for ProcType {
 pub fn cmd(cmd: FetchCmd) -> Result<()> {
     match cmd {
         FetchCmd::CA(args) => cert_authority::fetch_ca(args),
-        FetchCmd::VCEK(args) => vcek::fetch_vcek(args),
-        FetchCmd::CERTS(args) => certificates::fetch_certs(args),
-        FetchCmd::KEY(args) => key::fetch_key(args),
+        FetchCmd::Vcek(args) => vcek::fetch_vcek(args),
+        FetchCmd::Key(args) => key::fetch_key(args),
     }
 }
 
@@ -70,13 +64,16 @@ mod cert_authority {
 
     #[derive(StructOpt)]
     pub struct Args {
-        #[structopt(help = "Directory to store the certificates in.")]
-        pub certs_dir: PathBuf,
+        #[structopt(help = "Specify encoding to use for certificates. [PEM | DER]")]
+        pub encoding: CertFormat,
 
         #[structopt(
             help = "Specify the processor model for the certificate chain. [Milan | Genoa]"
         )]
         pub processor_model: ProcType,
+
+        #[structopt(help = "Directory to store the certificates in.")]
+        pub certs_dir: PathBuf,
     }
 
     // Function to build kds request for ca chain and return a vector with the 2 certs (ASK & ARK)
@@ -88,7 +85,7 @@ mod cert_authority {
         // Should make -> https://kdsintf.amd.com/vcek/v1/{SEV_PROD_NAME}/cert_chain
         let url: String = format!("{KDS_CERT_SITE}{KDS_VCEK}/{processor_model}/{KDS_CERT_CHAIN}");
 
-        let rsp: Response = get(&url).context("Could not get certs from URL")?;
+        let rsp: Response = get(url).context("Could not get certs from URL")?;
 
         // Parse response
         let body = rsp
@@ -114,8 +111,18 @@ mod cert_authority {
         let ark_cert = &certificates[1];
         let ask_cert = &certificates[0];
 
-        write_cert(args.certs_dir.clone(), &CertType::ARK, &ark_cert.to_pem()?)?;
-        write_cert(args.certs_dir.clone(), &CertType::ASK, &ask_cert.to_pem()?)?;
+        write_cert(
+            args.certs_dir.clone(),
+            &CertType::ARK,
+            &ark_cert.to_pem()?,
+            args.encoding,
+        )?;
+        write_cert(
+            args.certs_dir.clone(),
+            &CertType::ASK,
+            &ask_cert.to_pem()?,
+            args.encoding,
+        )?;
 
         Ok(())
     }
@@ -126,43 +133,39 @@ mod vcek {
 
     #[derive(StructOpt)]
     pub struct Args {
-        #[structopt(help = "Directory to store the VCEK in.")]
-        pub certs_dir: PathBuf,
-
-        #[structopt(help = "Specify the processor model for the VCEK. [Milan | Genoa]")]
-        pub processor_model: ProcType,
+        #[structopt(help = "Specify encoding to use for certificates. [PEM | DER]")]
+        pub encoding: CertFormat,
 
         #[structopt(
-            long = "att-report",
-            short,
-            help = "Optional: path to attestation report to use to request VCEK."
+            help = "Specify the processor model for the certificate chain. [Milan | Genoa]"
         )]
-        pub att_report_path: Option<PathBuf>,
+        pub processor_model: ProcType,
+
+        #[structopt(help = "Directory to store the certificates in.")]
+        pub certs_dir: PathBuf,
+
+        #[structopt(help = "Path to attestation report to use to request VCEK.")]
+        pub att_report_path: PathBuf,
     }
 
     // Function to request vcek from KDS. Return vcek in der format.
     pub fn request_vcek_kds(
         processor_model: ProcType,
-        att_report_path: Option<PathBuf>,
+        att_report_path: PathBuf,
     ) -> Result<Vec<u8>, anyhow::Error> {
         // KDS URL parameters
         const KDS_CERT_SITE: &str = "https://kdsintf.amd.com";
         const KDS_VCEK: &str = "/vcek/v1";
 
         // Grab attestation report if path provided, request report if no path is provided
-        let att_report = match att_report_path {
-            Some(path) => {
-                // Check that provided path contains an attestation report
-                if !path.exists() {
-                    return Err(anyhow::anyhow!("No attestation report in provided path."));
-                }
-                report::read_report(path).context("Could not open attestation report")?
-            }
-            None => report::request_default_report()?,
+        let att_report = if !att_report_path.exists() {
+            return Err(anyhow::anyhow!("No attestation report in provided path."));
+        } else {
+            report::read_report(att_report_path).context("Could not open attestation report")?
         };
 
         // Use attestation report to get data for URL
-        let hw_id: String = hex::encode(&att_report.chip_id);
+        let hw_id: String = hex::encode(att_report.chip_id);
 
         let vcek_url: String = format!(
             "{KDS_CERT_SITE}{KDS_VCEK}/{processor_model}/\
@@ -174,7 +177,7 @@ mod vcek {
         );
 
         // VCEK in DER format
-        let vcek_rsp = get(&vcek_url).context("Could not get VCEK from URL")?;
+        let vcek_rsp = get(vcek_url).context("Could not get VCEK from URL")?;
 
         let vcek_rsp_bytes = vcek_rsp.bytes().context("Unable to parse VCEK")?.to_vec();
 
@@ -192,105 +195,7 @@ mod vcek {
 
         let vcek_path = args.certs_dir.clone();
 
-        write_cert(vcek_path, &CertType::VCEK, &vcek)?;
-
-        Ok(())
-    }
-}
-
-mod certificates {
-    use super::*;
-    use report::create_random_request;
-    use sev::firmware::{
-        guest::Firmware,
-        host::{CertTableEntry, CertType},
-    };
-    use std::{fs, path::PathBuf};
-
-    #[derive(StructOpt)]
-    pub struct Args {
-        #[structopt(long, short = "e", help = "Fetch certificates from extended report.")]
-        pub extended_report: bool,
-
-        #[structopt(help = "Directory to store certificates")]
-        pub certs_dir: PathBuf,
-
-        #[structopt(
-            help = "Specify the processor model for the certificates [Milan | Genoa] (KDS only)",
-            required_unless("extended-report")
-        )]
-        pub processor_model: Option<ProcType>,
-
-        #[structopt(
-            long = "att-report",
-            short,
-            help = "Optional: path to attestation report to use to request VCEK (KDS only)"
-        )]
-        pub att_report_path: Option<PathBuf>,
-    }
-
-    pub fn fetch_certs(args: Args) -> Result<()> {
-        // If an attestation report will be requested, open the SEV firmware and create a random request
-        let (sev_fw, request_data) = if args.att_report_path.is_none() {
-            (
-                Some(Firmware::open().context("failed to open SEV firmware device.")?),
-                Some(create_random_request()),
-            )
-        } else {
-            (None, None)
-        };
-
-        // Create certificate directory if missing
-        if !args.certs_dir.exists() {
-            fs::create_dir(args.certs_dir.clone()).context("Could not create certs folder")?;
-        }
-
-        // Depending on request type, get certificate chain
-        let certificates = match args.extended_report {
-            true => {
-                let (_, memory_certs) = sev_fw
-                    .unwrap()
-                    .get_ext_report(None, Some(request_data.unwrap()), None)
-                    .context("Failed to get extended report.")?;
-
-                if memory_certs.is_empty() {
-                    return Err(anyhow::anyhow!(
-                        "The certificate chain is empty! Certificates probably not loaded by the host."
-                    ));
-                }
-                memory_certs
-            }
-            false => {
-                let mut kds_certs: Vec<CertTableEntry> = Vec::new();
-                let ca_chain = cert_authority::request_ca_kds(
-                    args.processor_model
-                        .clone()
-                        .context("Processor model not provided")?,
-                )?;
-                let kds_ark = ca_chain[1].to_pem()?;
-                let kds_ask = ca_chain[0].to_pem()?;
-                let kds_vcek = vcek::request_vcek_kds(
-                    args.processor_model
-                        .clone()
-                        .context("Processor model not provided")?,
-                    args.att_report_path,
-                )?;
-
-                kds_certs.push(CertTableEntry::new(CertType::ARK, kds_ark));
-                kds_certs.push(CertTableEntry::new(CertType::ASK, kds_ask));
-                kds_certs.push(CertTableEntry::new(CertType::VCEK, kds_vcek));
-
-                kds_certs
-            }
-        };
-
-        // Write certificate chain into files
-        for cert in certificates.iter() {
-            // Generate path from provided certs path
-            let path = args.certs_dir.clone();
-
-            write_cert(path, &cert.cert_type, &cert.data)?;
-        }
+        write_cert(vcek_path, &CertType::VCEK, &vcek, args.encoding)?;
 
         Ok(())
     }
