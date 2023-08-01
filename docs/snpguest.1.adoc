@@ -26,13 +26,16 @@ GLOBAL OPTIONS
 COMMANDS
 --------
 *snpguest report*::
-    usage: snpguest report $ATT_REPORT_PATH $REQUEST_FILE [-v, --vmpl] $VMPL [-r, --random]
+    usage: snpguest report $ATT_REPORT_PATH $REQUEST_FILE [-v, --vmpl] $VMPL [-r, --random] [-p, --platform]
     
     Requests an attestation report from the host and writes it in a file with the provided request data and vmpl. 
     Will write the contents of the attestation report in binary format into the specified report path.
     A path for the attestation report must be provided.
     User can pass 64 bytes of data in any file format into $REQUEST_FILE in order to use that data to request the attestation report.
     The user can use the --random flag to generate and use random data for request data.
+    For Microsoft Hyper-V guests, a user can use the --platform flag to use the request data that was pre-generated
+    from the platform. Currently, for Hyper-V guests, --platform is required, as there is no ability to write
+    request data for the attestation report.
     If the user uses the --random flag, then the data will be written into the file they provided in $REQUEST_FILE.
     VMPL is an optional parameter and it defaults to 1.
     
