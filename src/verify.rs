@@ -6,38 +6,31 @@ use certs::{convert_path_to_cert, CertPaths};
 
 use std::{io::ErrorKind, path::PathBuf};
 
-use anyhow;
 use openssl::{ecdsa::EcdsaSig, sha::Sha384};
 use sev::certs::snp::Chain;
 
 #[derive(StructOpt)]
 pub enum VerifyCmd {
     #[structopt(about = "Verify the certificate chain.")]
-    CERTS(certificate_chain::Args),
+    Certs(certificate_chain::Args),
 
-    #[structopt(about = "Verify the trusted computing based (TCB).")]
-    TCB(tcb::Args),
-
-    #[structopt(about = "Verify the Attestation Report Signature with the VCEK.")]
-    SIGNATURE(attestation_signature::Args),
+    #[structopt(about = "Verify the attestation report.")]
+    Attestation(attestation::Args),
 }
 
 pub fn cmd(cmd: VerifyCmd, quiet: bool) -> Result<()> {
     match cmd {
-        VerifyCmd::CERTS(args) => certificate_chain::validate_cc(args, quiet),
-        VerifyCmd::TCB(args) => tcb::validate_cert_metadata(args, quiet),
-        VerifyCmd::SIGNATURE(args) => {
-            attestation_signature::verify_attestation_signature(args, quiet)
-        }
+        VerifyCmd::Certs(args) => certificate_chain::validate_cc(args, quiet),
+        VerifyCmd::Attestation(args) => attestation::verify_attesation(args, quiet),
     }
 }
 
 // Find a certificate in specified directory according to its extension
 pub fn find_cert_in_dir(dir: PathBuf, cert: &str) -> Result<PathBuf, anyhow::Error> {
-    if PathBuf::from(dir.join(format!("{cert}.pem"))).exists() {
-        Ok(PathBuf::from(dir.join(format!("{cert}.pem"))))
-    } else if PathBuf::from(dir.join(format!("{cert}.der"))).exists() {
-        Ok(PathBuf::from(dir.join(format!("{cert}.der"))))
+    if dir.join(format!("{cert}.pem")).exists() {
+        Ok(dir.join(format!("{cert}.pem")))
+    } else if dir.join(format!("{cert}.der")).exists() {
+        Ok(dir.join(format!("{cert}.der")))
     } else {
         return Err(anyhow::anyhow!("{cert} certificate not found in directory"));
     }
@@ -62,9 +55,9 @@ mod certificate_chain {
 
         // Get a cert chain from directory
         let cert_chain: Chain = CertPaths {
-            ark_path: ark_path,
-            ask_path: ask_path,
-            vcek_path: vcek_path,
+            ark_path,
+            ask_path,
+            vcek_path,
         }
         .try_into()?;
 
@@ -126,12 +119,14 @@ mod certificate_chain {
     }
 }
 
-mod tcb {
+mod attestation {
     use super::*;
 
     use asn1_rs::{oid, FromDer, Oid};
 
     use x509_parser::{self, certificate::X509Certificate, prelude::X509Extension};
+
+    use sev::{certs::snp::Certificate, firmware::guest::AttestationReport};
 
     enum SnpOid {
         BootLoader,
@@ -154,6 +149,63 @@ mod tcb {
         }
     }
 
+    #[derive(StructOpt)]
+    pub struct Args {
+        #[structopt(help = "Path to directory containing VCEK.")]
+        pub certs_dir: PathBuf,
+
+        #[structopt(help = "Path to attestation report to use for validation.")]
+        pub att_report_path: PathBuf,
+
+        #[structopt(long = "tcb", short, help = "Run the tcb verification only.")]
+        pub tcb: bool,
+
+        #[structopt(
+            long = "signature",
+            short,
+            help = "Run the signature verification only."
+        )]
+        pub signature: bool,
+    }
+
+    fn verify_attestation_signature(
+        vcek: Certificate,
+        att_report: AttestationReport,
+        quiet: bool,
+    ) -> Result<()> {
+        let vcek_pubkey = vcek
+            .public_key()
+            .context("Failed to get the public key from the VCEK.")?
+            .ec_key()
+            .context("Failed to convert VCEK public key into ECkey.")?;
+
+        // Get the attestation report signature
+        let ar_signature = EcdsaSig::try_from(&att_report.signature)
+            .context("Failed to get ECDSA Signature from attestation report.")?;
+        let signed_bytes = &bincode::serialize(&att_report)
+            .context("Failed to get the signed bytes from the attestation report.")?[0x0..0x2A0];
+
+        let mut hasher: Sha384 = Sha384::new();
+
+        hasher.update(signed_bytes);
+
+        let base_message_digest: [u8; 48] = hasher.finish();
+
+        // Verify signature
+        if ar_signature
+            .verify(base_message_digest.as_ref(), vcek_pubkey.as_ref())
+            .context("Failed to verify attestation report signature with VCEK public key.")?
+        {
+            if !quiet {
+                println!("VCEK signed the Attestation Report!");
+            }
+        } else {
+            return Err(anyhow::anyhow!("VCEK did NOT sign the Attestation Report!"));
+        }
+
+        Ok(())
+    }
+
     // Check the cert extension byte to value
     fn check_cert_ext_byte(ext: &X509Extension, val: u8) -> bool {
         if ext.value[0] != 0x2 {
@@ -174,38 +226,12 @@ mod tcb {
         ext.value == val
     }
 
-    #[derive(StructOpt)]
-    pub struct Args {
-        #[structopt(help = "Path to directory containing the VCEK")]
-        pub certs_dir: PathBuf,
-
-        #[structopt(
-            long = "att-report",
-            short,
-            help = "Optional: path to attestation report to use for validation."
-        )]
-        pub att_report_path: Option<PathBuf>,
-    }
-
-    // Function to validate the vcek metadata with the TCB
-    pub fn validate_cert_metadata(args: Args, quiet: bool) -> Result<()> {
-        let att_report = match args.att_report_path {
-            Some(path) => {
-                // Check that provided path contains an attestation report
-                if !path.exists() {
-                    return Err(anyhow::anyhow!("No attestation report was found. Provide an attestation report to request VCEK from the KDS."));
-                }
-                report::read_report(path).context("Could not open attestation report")?
-            }
-            // No path provieded, request an attestation report with default values and random data
-            None => report::request_default_report()?,
-        };
-
-        // Find VCEK and make it an X509Certificate
-        let vcek_path = find_cert_in_dir(args.certs_dir, "vcek")?;
-        let vcek_der = convert_path_to_cert(&vcek_path, "vcek")?
-            .to_der()
-            .context("Could not convert VCEK to der.")?;
+    fn verify_attestation_tcb(
+        vcek: Certificate,
+        att_report: AttestationReport,
+        quiet: bool,
+    ) -> Result<()> {
+        let vcek_der = vcek.to_der().context("Could not convert VCEK to der.")?;
         let (_, vcek_x509) = X509Certificate::from_der(&vcek_der)
             .context("Could not create X509Certificate from der")?;
 
@@ -278,69 +304,30 @@ mod tcb {
 
         Ok(())
     }
-}
 
-mod attestation_signature {
-    use super::*;
-
-    #[derive(StructOpt)]
-    pub struct Args {
-        #[structopt(help = "Path to directory containing VCEK.")]
-        pub certs_dir: PathBuf,
-
-        #[structopt(
-            long = "att-report",
-            short,
-            help = "Optional: path to attestation report to use for validation."
-        )]
-        pub att_report_path: Option<PathBuf>,
-    }
-
-    // Function to verify attestation report signature
-    pub fn verify_attestation_signature(args: Args, quiet: bool) -> Result<()> {
-        let att_report = match args.att_report_path {
-            Some(path) => {
-                // Check that provided path contains an attestation report
-                if !path.exists() {
-                    return Err(anyhow::anyhow!("No attestation report was found. Provide an attestation report to request VCEK from the KDS."));
-                }
-                report::read_report(path).context("Could not open attestation report")?
-            }
-            // No path provieded, request an attestation report with default values and random data
-            None => report::request_default_report()?,
+    pub fn verify_attesation(args: Args, quiet: bool) -> Result<()> {
+        // Get attestation report
+        let att_report = if !args.att_report_path.exists() {
+            return Err(anyhow::anyhow!("No attestation report was found. Provide an attestation report to request VCEK from the KDS."));
+        } else {
+            report::read_report(args.att_report_path)
+                .context("Could not open attestation report")?
         };
 
         // Get VCEK and grab its public key
         let vcek_path = find_cert_in_dir(args.certs_dir, "vcek")?;
         let vcek = convert_path_to_cert(&vcek_path, "vcek")?;
-        let vcek_pubkey = vcek
-            .public_key()
-            .context("Failed to get the public key from the VCEK.")?
-            .ec_key()
-            .context("Failed to convert VCEK public key into ECkey.")?;
 
-        // Get the attestation report signature
-        let ar_signature = EcdsaSig::try_from(&att_report.signature)
-            .context("Failed to get ECDSA Signature from attestation report.")?;
-        let signed_bytes = &bincode::serialize(&att_report)
-            .context("Failed to get the signed bytes from the attestation report.")?[0x0..0x2A0];
-
-        let mut hasher: Sha384 = Sha384::new();
-
-        hasher.update(signed_bytes);
-
-        let base_message_digest: [u8; 48] = hasher.finish();
-
-        // Verify signature
-        if ar_signature
-            .verify(base_message_digest.as_ref(), vcek_pubkey.as_ref())
-            .context("Failed to verify attestation report signature with VCEK public key.")?
-        {
-            if !quiet {
-                println!("VCEK signed the Attestation Report!");
+        if args.tcb || args.signature {
+            if args.tcb {
+                verify_attestation_tcb(vcek.clone(), att_report, quiet)?;
+            }
+            if args.signature {
+                verify_attestation_signature(vcek, att_report, quiet)?;
             }
         } else {
-            return Err(anyhow::anyhow!("VCEK did NOT sign the Attestation Report!"));
+            verify_attestation_tcb(vcek.clone(), att_report, quiet)?;
+            verify_attestation_signature(vcek, att_report, quiet)?;
         }
 
         Ok(())

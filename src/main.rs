@@ -7,6 +7,7 @@ mod key;
 mod report;
 mod verify;
 
+use certs::CertificatesArgs;
 use display::DisplayCmd;
 use fetch::FetchCmd;
 use key::KeyArgs;
@@ -35,6 +36,9 @@ enum SnpGuestCmd {
     #[structopt(about = "Report command to request an attestation report.")]
     Report(ReportArgs),
 
+    #[structopt(about = "Certificates command to request cached certificates from the AMD PSP")]
+    Certificates(CertificatesArgs),
+
     #[structopt(about = "Fetch command to request certificates.")]
     Fetch(FetchCmd),
 
@@ -55,6 +59,7 @@ fn main() -> Result<()> {
 
     let status = match snpguest.cmd {
         SnpGuestCmd::Report(args) => report::get_report(args),
+        SnpGuestCmd::Certificates(args) => certs::get_ext_certs(args),
         SnpGuestCmd::Fetch(subcmd) => fetch::cmd(subcmd),
         SnpGuestCmd::Verify(subcmd) => verify::cmd(subcmd, snpguest.quiet),
         SnpGuestCmd::Display(subcmd) => display::cmd(subcmd, snpguest.quiet),
