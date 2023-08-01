@@ -3,11 +3,13 @@
 mod certs;
 mod display;
 mod fetch;
+mod key;
 mod report;
 mod verify;
 
 use display::DisplayCmd;
 use fetch::FetchCmd;
+use key::KeyArgs;
 use report::ReportArgs;
 use verify::VerifyCmd;
 
@@ -41,6 +43,9 @@ enum SnpGuestCmd {
 
     #[structopt(about = "Display command to display files in human readable form.")]
     Display(DisplayCmd),
+
+    #[structopt(about = "Key command to display derived key.")]
+    Key(KeyArgs),
 }
 
 fn main() -> Result<()> {
@@ -53,6 +58,7 @@ fn main() -> Result<()> {
         SnpGuestCmd::Fetch(subcmd) => fetch::cmd(subcmd),
         SnpGuestCmd::Verify(subcmd) => verify::cmd(subcmd, snpguest.quiet),
         SnpGuestCmd::Display(subcmd) => display::cmd(subcmd, snpguest.quiet),
+        SnpGuestCmd::Key(args) => key::get_derived_key(args),
     };
 
     if let Err(ref e) = status {
