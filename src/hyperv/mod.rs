@@ -21,17 +21,17 @@ const CPUID_HYPERV_ISOLATION_TYPE_MASK: u32 = 0xf;
 const CPUID_HYPERV_ISOLATION_TYPE_SNP: u32 = 2;
 
 pub fn present() -> bool {
-    let cpuid = unsafe { __cpuid(CPUID_PROCESSOR_INFO_AND_FEATURE_BITS) };
+    let mut cpuid = unsafe { __cpuid(CPUID_PROCESSOR_INFO_AND_FEATURE_BITS) };
     if (cpuid.ecx & CPUID_FEATURE_HYPERVISOR) == 0 {
         return false;
     }
 
-    let cpuid = unsafe { __cpuid(CPUID_GET_HIGHEST_FUNCTION) };
+    cpuid = unsafe { __cpuid(CPUID_GET_HIGHEST_FUNCTION) };
     if cpuid.eax < CPUID_HYPERV_VENDOR_AND_MAX_FUNCTIONS {
         return false;
     }
 
-    let cpuid = unsafe { __cpuid(CPUID_HYPERV_VENDOR_AND_MAX_FUNCTIONS) };
+    cpuid = unsafe { __cpuid(CPUID_HYPERV_VENDOR_AND_MAX_FUNCTIONS) };
     if cpuid.eax < CPUID_HYPERV_MIN || cpuid.eax > CPUID_HYPERV_MAX {
         return false;
     }
@@ -45,7 +45,7 @@ pub fn present() -> bool {
         return false;
     }
 
-    let cpuid = unsafe { __cpuid(CPUID_HYPERV_FEATURES) };
+    cpuid = unsafe { __cpuid(CPUID_HYPERV_FEATURES) };
 
     let isolated: bool = (cpuid.ebx & CPUID_HYPERV_ISOLATION) != 0;
     let managed: bool = (cpuid.ebx & CPUID_HYPERV_CPU_MANAGEMENT) != 0;
@@ -54,7 +54,7 @@ pub fn present() -> bool {
         return false;
     }
 
-    let cpuid = unsafe { __cpuid(CPUID_HYPERV_ISOLATION_CONFIG) };
+    cpuid = unsafe { __cpuid(CPUID_HYPERV_ISOLATION_CONFIG) };
     let mask = cpuid.ebx & CPUID_HYPERV_ISOLATION_TYPE_MASK;
     let snp = CPUID_HYPERV_ISOLATION_TYPE_SNP;
 
