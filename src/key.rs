@@ -89,10 +89,10 @@ let derived_key: [u8; 32] = sev_fw
     .get_derived_key(None, request)
     .context("failed to request derived key")?;
 
-// Create attestation report path
+// Create derived key path
 let key_path: PathBuf = args.key_path;
 
-// Write attestation report into desired file
+// Write derived key into desired file
 let mut key_file = if key_path.exists() {
     std::fs::OpenOptions::new()
         .write(true)
@@ -107,4 +107,13 @@ bincode::serialize_into(&mut key_file, &derived_key)
     .context("Could not serialize attestation report into file.")?;
 
 Ok(())
+}
+
+pub fn read_key(key_path: PathBuf) -> Result<Vec<u8>, anyhow::Error> {
+    let key_file = fs::File::open(key_path)?;
+
+    let key_report = bincode::deserialize_from(key_file)
+        .context("Could not parse key.")?;
+
+    Ok(key_report)
 }
