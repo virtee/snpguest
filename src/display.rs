@@ -50,8 +50,8 @@ mod key_display {
 
     #[derive(StructOpt)]
     pub struct Args {
-        #[structopt(help = "Path to attestation report to display.")]
-        pub att_report_path: PathBuf,
+        #[structopt(help = "Path to display key.")]
+        pub key_path: PathBuf,
     }
 
     // Print attestation report in console
@@ -60,7 +60,7 @@ mod key_display {
             .context("Could not open key")?;
 
         if !quiet {
-            println!("{}", key_report);
+            println!("{:?}", key_report);
         };
 
         Ok(())
