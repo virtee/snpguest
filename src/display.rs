@@ -3,6 +3,7 @@
 use super::*;
 use std::{
     fs,
+    str,
     fs::File,
     io::{BufWriter, Read, Write},
     path::PathBuf,
@@ -54,16 +55,24 @@ mod key_display {
         pub key_path: PathBuf,
     }
 
-    // Print attestation report in console
+    // Print derived key in console
     pub fn display_derived_key(args: Args, quiet: bool) -> Result<()> {
         let key_report = key::read_key(args.key_path)
             .context("Could not open key")?;
 
         if !quiet {
-            let buf = &[0x41u8, 0x41u8, 0x42u8];
-            let s = String::from_utf8_lossy(buf);
-            println!("result: {}", s);
+            //let buf = &[0x41u8, 0x41u8, 0x42u8];
+            //let s = String::from_utf8_lossy(buf);
+            //println!("result: {}", s);
             println!("{:?}", key_report);
+            let buf = &[0x41u8, 0x41u8, 0x42u8];
+
+            let s = match str::from_utf8(buf) {
+                Ok(v) => v,
+                Err(e) => panic!("Invalid UTF-8 sequence: {}", e),
+            };
+        
+            println!("result: {}", s);
         };
 
         Ok(())
@@ -84,3 +93,17 @@ pub fn key_hex<W: Write>(file: &mut BufWriter<W>, data: &[u8]) -> Result<()> {
     }
     Ok(())
 }
+/* 
+pub fn hexdump(bytes: &[u8]) -> String {
+    let mut retval: String = String::new();
+    for (i, byte) in bytes.iter().enumerate() {
+        if (i % 16) == 0 {
+            retval.push('\n');
+        }
+        retval.push_str(&format!("{byte:02x} "));
+    }
+    retval.push('\n');
+    retval
+}
+
+*/
