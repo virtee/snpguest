@@ -4,6 +4,7 @@ use super::*;
 use sev::firmware::guest::{DerivedKey, Firmware, GuestFieldSelect};
 //use std::{fs, path::PathBuf, str::FromStr};
 use std::{fs, path::PathBuf};
+use std::io::Read;
 
 #[derive(StructOpt)]
 pub struct KeyArgs {
@@ -110,10 +111,13 @@ Ok(())
 }
 
 pub fn read_key(key_path: PathBuf) -> Result<Vec<u8>, anyhow::Error> {
-    let key_file = fs::File::open(key_path)?;
+    
+    let mut key_file = fs::File::open(key_path)?;
+    let mut key = Vec::new();
+    // read the whole file
+    key_file.read_to_end(&mut key)?;
+    //let key_report = bincode::deserialize_from(key_file)
+    //    .context("Could not parse key.")?;
 
-    let key_report = bincode::deserialize_from(key_file)
-        .context("Could not parse key.")?;
-
-    Ok(key_report)
+    Ok(key)
 }
