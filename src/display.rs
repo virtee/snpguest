@@ -60,6 +60,9 @@ mod key_display {
             .context("Could not open key")?;
 
         if !quiet {
+            let buf = &[0x41u8, 0x41u8, 0x42u8];
+            let s = String::from_utf8_lossy(buf);
+            println!("result: {}", s);
             println!("{:?}", key_report);
         };
 
