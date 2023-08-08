@@ -74,15 +74,9 @@ let gfs = match args.gfs {
     None => 0,
 };
 
-let gsvn:u32 = match args.gsvn {
-    Some(ret_gsvn) => ret_gsvn,
-    None => 0,
-};
+let gsvn:u32 = args.gsvn.unwrap_or(0);
 
-let tcbv:u64 = match args.tcbv {
-    Some(ret_tcbv) => ret_tcbv,
-    None => 0,
-};
+let tcbv:u64 = args.tcbv.unwrap_or(0);
 
 let request = DerivedKey::new(rks, GuestFieldSelect(gfs), vmpl, gsvn,tcbv );
 let mut sev_fw = Firmware::open().context("failed to open SEV firmware device.")?;

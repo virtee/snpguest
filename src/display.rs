@@ -2,10 +2,7 @@
 
 use super::*;
 use std::{
-    fs,
     str,
-    fs::File,
-    io::{BufWriter, Read, Write},
     path::PathBuf,
 };
 
@@ -75,44 +72,3 @@ mod key_display {
         Ok(())
     }
 }
-/* 
-pub fn hexdump(bytes: &[u8]){
-    let mut retval: String = String::new();
-    for (i, byte) in bytes.iter().enumerate() {
-        if (i % 16) == 0 {
-            retval.push('\n');
-        }
-        retval.push_str(&format!("{byte:02x} "));
-    }
-    retval.push('\n');
-    println!("{}",retval);
-}
-
-pub fn key_hex<W: Write>(file: &mut BufWriter<W>, data: &[u8]) -> Result<()> {
-    let mut line_counter = 0;
-    for val in data {
-        // Make it blocks for easier read
-        if line_counter.eq(&16) {
-            writeln!(file).context("Failed to write data to file")?;
-            line_counter = 0;
-        }
-        // Write byte into file
-        write!(file, "{:02x}", val).context("Failed to write data to file")?;
-        line_counter += 1;
-    }
-    Ok(())
-}
-
-pub fn hexdump(bytes: &[u8]) -> String {
-    let mut retval: String = String::new();
-    for (i, byte) in bytes.iter().enumerate() {
-        if (i % 16) == 0 {
-            retval.push('\n');
-        }
-        retval.push_str(&format!("{byte:02x} "));
-    }
-    retval.push('\n');
-    retval
-}
-
-*/
