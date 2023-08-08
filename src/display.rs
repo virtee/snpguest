@@ -61,13 +61,25 @@ mod key_display {
             .context("Could not open key")?;
 
         if !quiet {
+            hexdump(&key_report);
             println!("{:?}", key_report);
         };
 
         Ok(())
     }
 }
-
+pub fn hexdump(bytes: &[u8]){
+    let mut retval: String = String::new();
+    for (i, byte) in bytes.iter().enumerate() {
+        if (i % 16) == 0 {
+            retval.push('\n');
+        }
+        retval.push_str(&format!("{byte:02x} "));
+    }
+    retval.push('\n');
+    println!("{}",retval);
+}
+/* 
 pub fn key_hex<W: Write>(file: &mut BufWriter<W>, data: &[u8]) -> Result<()> {
     let mut line_counter = 0;
     for val in data {
@@ -82,7 +94,7 @@ pub fn key_hex<W: Write>(file: &mut BufWriter<W>, data: &[u8]) -> Result<()> {
     }
     Ok(())
 }
-/* 
+
 pub fn hexdump(bytes: &[u8]) -> String {
     let mut retval: String = String::new();
     for (i, byte) in bytes.iter().enumerate() {
