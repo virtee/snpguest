@@ -32,7 +32,8 @@ mod report_display {
 
     // Print attestation report in console
     pub fn display_attestation_report(args: Args, quiet: bool) -> Result<()> {
-        let att_report = report::read_report(args.att_report_path).context("Could not open attestation report")?;
+        let att_report = report::read_report(args.att_report_path)
+            .context("Could not open attestation report")?;
 
         if !quiet {
             println!("{}", att_report);

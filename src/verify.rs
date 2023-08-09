@@ -51,7 +51,7 @@ mod certificate_chain {
     pub fn validate_cc(args: Args, quiet: bool) -> Result<()> {
         let ark_path = find_cert_in_dir(args.certs_dir.clone(), "ark")?;
         let ask_path = find_cert_in_dir(args.certs_dir.clone(), "ask")?;
-        let vcek_path = find_cert_in_dir(args.certs_dir.clone(), "vcek")?;
+        let vcek_path = find_cert_in_dir(args.certs_dir, "vcek")?;
 
         // Get a cert chain from directory
         let cert_chain: Chain = CertPaths {
