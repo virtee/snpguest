@@ -111,6 +111,25 @@ COMMANDS
     -t, --tcb verify the tcb section of the report only
     -s, --signature verify the signature of the report only
 
+*snpguest key*::
+    usage: snpguest key $KEY_PATH $ROOT_KEY_SELECT
+
+    Creates the derived key based on input parameters and stores it.
+    $KEY_PATH is the path to store the derived key.
+    $ROOT_KEY_SELECT is the root key from which to derive the key. Input either "vcek" or "vmrk". "vlek" is not supported yet.
+
+    options:
+    -h, --help show a help message
+    -g, --guest_field_select <gfs>    Specify which Guest Field Select bits to enable. Value of N for Guest Policy:0,
+                                      Image ID:1, Family ID:2, Measurement:3, SVN:4, TCB Version:5 where Guest Field
+                                      Select bit = 10^N
+    -g, --guest_svn <gsvn>            Specify the guest SVN to mix into the key. Must not exceed the guest SVN provided
+                                      at launch in the ID block.
+    -t, --tcb_version <tcbv>          Specify the TCB version to mix into the derived key. Must not exceed CommittedTcb
+    -v, --vmpl <vmpl>                 Specify VMPL level the Guest is running on. Defaults to 1.
+ 
+
+
 *snpguest guest display report*::
     usage: snpguest display report $ATT_REPORT_PATH
 
@@ -119,6 +138,17 @@ COMMANDS
 
     options:
     -h, --help show a help message
+
+*snpguest guest display key*::
+    usage: snpguest display key $KEY_PATH
+
+    Prints the derived key contents in hex format into terminal.
+    The user has to provide the path of a stored derived key to display.
+
+    options:
+    -h, --help show a help message
+
+*
 
 REPORTING BUGS
 --------------
