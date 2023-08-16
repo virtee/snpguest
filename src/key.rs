@@ -7,13 +7,13 @@ use std::{fs, path::PathBuf};
 
 #[derive(StructOpt)]
 pub struct KeyArgs {
-    #[structopt(help = "This is the directory where the derived key will be saved")]
+    #[structopt(help = "This is the path where the derived key will be saved")]
     pub key_path: PathBuf,
 
     #[structopt(
-        help = "This is the root key from which to derive the key. Input either VCEK or VMRK. VLEK is not supported yet."
+        help = "This is the root key from which to derive the key. Input either VCEK or VMRK."
     )]
-    pub rks: String,
+    pub root_key_select: String,
 
     #[structopt(
         long = "vmpl",
@@ -24,14 +24,15 @@ pub struct KeyArgs {
 
     #[structopt(
         long = "guest_field_select",
-        short = "gfs",
-        help = "Specify which Guest Field Select bits to enable. Value of N for Guest Policy:0, Image ID:1, Family ID:2, Measurement:3, SVN:4, TCB Version:5 where Guest Field Select bit = 10^N"
+        short = "g",
+        help = "Specify which Guest Field Select bits to enable. It is a 6 digit binary string. For each bit, 0 denotes off and 1 denotes on.
+        The least significant (rightmost) bit is Guest Policy followed by Image ID, Family ID, Measurement, SVN, TCB Version which is the most significant (leftmost) bit. "
     )]
     pub gfs: Option<String>,
 
     #[structopt(
         long = "guest_svn",
-        short = "gs",
+        short = "s",
         help = "Specify the guest SVN to mix into the key. Must not exceed the guest SVN provided at launch in the ID block."
     )]
     pub gsvn: Option<u32>,
@@ -45,7 +46,7 @@ pub struct KeyArgs {
 }
 
 pub fn get_derived_key(args: KeyArgs) -> Result<()> {
-    let rks = match args.rks.as_str() {
+    let root_key_select = match args.root_key_select.as_str() {
         "vcek" => false,
         "vmrk" => true,
         _ => return Err(anyhow::anyhow!("Invalid input. Enter either vcek or vmrk")),
@@ -56,7 +57,7 @@ pub fn get_derived_key(args: KeyArgs) -> Result<()> {
             if level <= 3 {
                 level
             } else {
-                return Err(anyhow::anyhow!("Invalid vmpl."));
+                return Err(anyhow::anyhow!("Invalid Virtual Machine Privilege Level."));
             }
         }
         None => 1,
@@ -68,7 +69,7 @@ pub fn get_derived_key(args: KeyArgs) -> Result<()> {
             if value <= 63 {
                 value
             } else {
-                return Err(anyhow::anyhow!("Invalid gfs."));
+                return Err(anyhow::anyhow!("Invalid Guest Field Select option."));
             }
         }
         None => 0,
@@ -78,11 +79,11 @@ pub fn get_derived_key(args: KeyArgs) -> Result<()> {
 
     let tcbv: u64 = args.tcbv.unwrap_or(0);
 
-    let request = DerivedKey::new(rks, GuestFieldSelect(gfs), vmpl, gsvn, tcbv);
+    let request = DerivedKey::new(root_key_select, GuestFieldSelect(gfs), vmpl, gsvn, tcbv);
     let mut sev_fw = Firmware::open().context("failed to open SEV firmware device.")?;
     let derived_key: [u8; 32] = sev_fw
         .get_derived_key(None, request)
-        .context("failed to request derived key")?;
+        .context("Failed to request derived key")?;
 
     // Create derived key path
     let key_path: PathBuf = args.key_path;
@@ -95,11 +96,11 @@ pub fn get_derived_key(args: KeyArgs) -> Result<()> {
             .open(key_path)
             .context("Unable to overwrite derived key file contents")?
     } else {
-        fs::File::create(key_path).context("Unable to create attestation report file contents")?
+        fs::File::create(key_path).context("Unable to create derived key file contents")?
     };
 
     bincode::serialize_into(&mut key_file, &derived_key)
-        .context("Could not serialize attestation report into file.")?;
+        .context("Could not serialize derived key into file.")?;
 
     Ok(())
 }

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use super::*;
-use std::{path::PathBuf, str};
+use std::path::PathBuf;
 
 #[derive(StructOpt)]
 pub enum DisplayCmd {
@@ -45,7 +45,7 @@ mod key_display {
 
     #[derive(StructOpt)]
     pub struct Args {
-        #[structopt(help = "Path to display key.")]
+        #[structopt(help = "Path of key to be displayed.")]
         pub key_path: PathBuf,
     }
 
@@ -59,6 +59,7 @@ mod key_display {
                 if (i % 16) == 0 {
                     keydata.push('\n');
                 }
+                //Displaying key in Hex format
                 keydata.push_str(&format!("{byte:02x} "));
             }
             keydata.push('\n');
