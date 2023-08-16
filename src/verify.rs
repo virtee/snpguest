@@ -223,7 +223,19 @@ mod attestation {
 
     // Check cert extension bytes to data
     fn check_cert_ext_bytes(ext: &X509Extension, val: &[u8]) -> bool {
-        ext.value == val
+        // Patching for a bug found in the VCEK where the raw bytes
+        // were provided instead of a DER encoded Octet String. Now
+        // this function will handle both.
+        if ext.value.len() > 0x40 {
+            if ext.value[0] != 0x4 {
+                panic!("Invalid type encountered!");
+            } else if ext.value[1] != 0x40 {
+                panic!("Invalid octet length encountered");
+            }
+            &ext.value[2..] == val
+        } else {
+            ext.value == val
+        }
     }
 
     fn verify_attestation_tcb(
