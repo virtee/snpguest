@@ -118,10 +118,9 @@ COMMANDS
     $ROOT_KEY_SELECT is the root key from which to derive the key. Input either "vcek" or "vmrk".
     The --guest_field_select option specifies which Guest Field Select bits to enable. It is a 6 digit binary string. For each bit, 0 denotes off and 1 denotes on.
     The least significant (rightmost) bit is Guest Policy followed by Image ID, Family ID, Measurement, SVN, TCB Version which is the most significant (leftmost) bit. 
+     example: snpguest key $KEY_PATH $ROOT_KEY_SELECT --guest_field_select 100001 (Denotes Guest Policy:On, Image ID:Off, Family ID:Off, Measurement:Off, SVN:Off, TCB Version:On)
     The --guest_svn specifies the guest SVN to mix into the key. Must not exceed the guest SVN provided at launch in the ID block.
     The --tcb_version specified the TCB version to mix into the derived key. Must not exceed CommittedTcb.
-    
-    example: snpguest key $KEY_PATH $ROOT_KEY_SELECT --guest_field_select 100001 (Denotes Guest Policy:On, Image ID:Off, Family ID:Off, Measurement:Off, SVN:Off, TCB Version:On)
 
 
     options:
