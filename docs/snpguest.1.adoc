@@ -111,6 +111,27 @@ COMMANDS
     -t, --tcb verify the tcb section of the report only
     -s, --signature verify the signature of the report only
 
+*snpguest key*::
+    usage: snpguest key $KEY_PATH $ROOT_KEY_SELECT [-g, --guest_field_select] [-s, --guest_svn] [-t, --tcb_version] [-v, --vmpl]
+    Creates the derived key based on input parameters and stores it.
+    $KEY_PATH is the path to store the derived key.
+    $ROOT_KEY_SELECT is the root key from which to derive the key. Input either "vcek" or "vmrk".
+    The --guest_field_select option specifies which Guest Field Select bits to enable. It is a 6 digit binary string. For each bit, 0 denotes off and 1 denotes on.
+    The least significant (rightmost) bit is Guest Policy followed by Image ID, Family ID, Measurement, SVN, TCB Version which is the most significant (leftmost) bit. 
+     example: snpguest key $KEY_PATH $ROOT_KEY_SELECT --guest_field_select 100001 (Denotes Guest Policy:On, Image ID:Off, Family ID:Off, Measurement:Off, SVN:Off, TCB Version:On)
+    The --guest_svn specifies the guest SVN to mix into the key. Must not exceed the guest SVN provided at launch in the ID block.
+    The --tcb_version specified the TCB version to mix into the derived key. Must not exceed CommittedTcb.
+
+
+    options:
+    -h, --help show a help message
+    -g, --guest_field_select      Specify which Guest Field Select bits to enable. 
+    -s, --guest_svn                Specify the guest SVN to mix into the key.
+    -t, --tcb_version               Specify the TCB version to mix into the derived key. 
+    -v, --vmpl                      Specify VMPL level the Guest is running on. Defaults to 1.
+ 
+
+
 *snpguest guest display report*::
     usage: snpguest display report $ATT_REPORT_PATH
 
@@ -119,6 +140,17 @@ COMMANDS
 
     options:
     -h, --help show a help message
+
+*snpguest guest display key*::
+    usage: snpguest display key $KEY_PATH
+
+    Prints the derived key contents in hex format into terminal.
+    The user has to provide the path of a stored derived key to display.
+
+    options:
+    -h, --help show a help message
+
+*
 
 REPORTING BUGS
 --------------
