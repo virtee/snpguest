@@ -3,10 +3,12 @@
 mod certs;
 mod display;
 mod fetch;
-mod hyperv;
 mod key;
 mod report;
 mod verify;
+
+#[cfg(feature = "hyperv")]
+mod hyperv;
 
 use certs::CertificatesArgs;
 use display::DisplayCmd;
@@ -57,7 +59,12 @@ fn main() -> Result<()> {
     env_logger::init();
 
     let snpguest = SnpGuest::from_args();
-    let hv = hyperv::present();
+
+    #[cfg(feature = "hyperv")]
+    let hv = hyperv::present;
+
+    #[cfg(not(feature = "hyperv"))]
+    let hv = false;
 
     let status = match snpguest.cmd {
         SnpGuestCmd::Report(args) => report::get_report(args, hv),
