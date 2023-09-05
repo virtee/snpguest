@@ -129,10 +129,8 @@ pub fn get_report(args: ReportArgs, hv: bool) -> Result<()> {
         .write(true)
         .open(&args.att_report_path)?;
 
-    write!(&mut file, "{}", report).context(format!(
-        "unable to write attestation report to {}",
-        args.att_report_path.display()
-    ))?;
+    bincode::serialize_into(&mut file, &report)
+        .context("Could not serialize attestation report into file.")?;
 
     /*
      * Write reports report data (only for --random or --platform).
