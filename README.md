@@ -17,10 +17,10 @@
     - [snpguest guest display report](#snpguest-guest-display-report)
     - [snpguest guest display key](#snpguest-guest-display-key)
 - [SNP Examples](#snp-examples)
-- [Reporting Bugs](#reporting-bugs)
 - [Extended Attestation Flowchart](#extended-attestation-flowchart)
 - [Regular Attestation Flowchart](#regular-attestation-flowchart)
-
+- [Building](#building)
+- [Reporting Bugs](#reporting-bugs)
 ## Summary
 
 The "src" directory in the `snpguest` GitHub repository contains several Rust source code files that collectively implement the functionality of the SNP Guest utility. Here's a summary of the functionality of each of these files:
@@ -556,11 +556,13 @@ source "$HOME/.cargo/env"
 #Building snpguest after cloning
 cargo build -r
 ```
-### Ubuntu Dependencies
+#### Ubuntu Dependencies
+
 ```console
 sudo apt install build-essential
 ```
-### RHEL and its compatible distributions Dependencies
+
+#### RHEL and its compatible distributions Dependencies
 
 ```console
 sudo dnf groupinstall "Development Tools" "Development Libraries"
