@@ -119,19 +119,16 @@ impl TryFrom<CertPaths> for Chain {
 }
 
 fn translate_cert(data: &[u8], cert_encoding: CertFormat) -> Vec<u8> {
-    match cert_encoding {
-        CertFormat::Pem => {
-            let temp_cert = X509::from_pem(data).expect("Failed to parse the certificate");
-            temp_cert
-                .to_der()
-                .expect("Failed to convert to DER encoding")
-        }
-        CertFormat::Der => {
-            let temp_cert = X509::from_der(data).expect("Failed to parse the certificate");
-            temp_cert
-                .to_pem()
-                .expect("Failed to convert to DER encoding")
-        }
+    match (identify_cert(&data[0..27]), cert_encoding) {
+        (CertFormat::Pem, CertFormat::Der) => X509::from_pem(data)
+            .expect("Failed to parse the certificate")
+            .to_der()
+            .expect("Failed to convert to DER encoding"),
+        (CertFormat::Der, CertFormat::Pem) => X509::from_der(data)
+            .expect("Failed to parse the certificate")
+            .to_pem()
+            .expect("Failed to convert to PEM encoding"),
+        _ => Vec::from(data),
     }
 }
 
@@ -150,23 +147,14 @@ pub fn write_cert(
         _ => return Err(anyhow::anyhow!("Invalid cert type")),
     };
 
-    // Identify cert as either pem or der
-    match identify_cert(&data[0..27]) {
-        CertFormat::Pem => match encoding {
-            CertFormat::Pem => path.push(format!("{}.pem", cert_str)),
-            CertFormat::Der => {
-                translate_cert(data, CertFormat::Pem);
-                path.push(format!("{}.der", cert_str));
-            }
-        },
-        CertFormat::Der => match encoding {
-            CertFormat::Der => path.push(format!("{}.der", cert_str)),
-            CertFormat::Pem => {
-                translate_cert(data, CertFormat::Der);
-                path.push(format!("{}.pem", cert_str));
-            }
-        },
+    let file_ext: &str = match encoding {
+        CertFormat::Pem => "pem",
+        CertFormat::Der => "der",
     };
+
+    path.push(format!("{}.{}", cert_str, file_ext));
+
+    let bytes: Vec<u8> = translate_cert(data, encoding);
 
     // Write cert into directory
     let mut file = if path.exists() {
@@ -179,7 +167,7 @@ pub fn write_cert(
         fs::File::create(path).context(format!("Unable to create {} certificate", cert_str))?
     };
 
-    file.write(data)
+    file.write(&bytes)
         .context(format!("unable to write data to file {:?}", file))?;
 
     Ok(())
