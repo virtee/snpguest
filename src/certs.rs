@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
+// This file contains code related to managing certificates. It defines a structure for managing certificate paths (`CertPaths`) and functions for obtaining extended certificates from the AMD Secure Processor.
 
 use super::*;
 

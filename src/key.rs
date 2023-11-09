@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
+// This file contains code for fetching derived keys from root keys. It also includes functions for requesting and saving derived keys.
 
 use super::*;
 use sev::firmware::guest::{DerivedKey, Firmware, GuestFieldSelect};

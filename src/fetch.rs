@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
+// This file contains subcommands for fetching various types of certificates from the AMD Secure Processor.
 
 use super::*;
 
