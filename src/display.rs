@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
+// This file contains the subcommands for displaying attestation reports and derived keys.
 
 use super::*;
 use std::path::PathBuf;

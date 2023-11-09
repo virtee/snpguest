@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
+// This file includes subcommands for verifying certificate chains and attestation reports. Submodules `certificate_chain` and `attestation` contain the verification logic for certificates and attestation reports, respectively.
 
 use super::*;
 

@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
+// This file contains code related to Hyper-V integration (Hypervisor). It provides a flag (`hyperv::present`) indicating whether the SNP Guest is running within a Hyper-V guest environment.
 
 use super::*;
 

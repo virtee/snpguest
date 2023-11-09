@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
+// This file defines the CLI for requesting attestation reports. It contains functions for requesting attestation reports and saving them to files. Additionally, it includes code for reading and parsing attestation reports.
 
 use super::*;
 
