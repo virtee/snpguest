@@ -41,6 +41,7 @@ COMMANDS
     
     options:
     -h, --help  show a help message
+    -p, --platform Use platform generated 64 bytes of data to pass for the report request
     -r, --random  Generate 64 random bytes of data to pass for the report request
     -v, --vmpl Specify a different vmpl level for the attestation report (defaults to 1)
 
@@ -113,6 +114,7 @@ COMMANDS
 
 *snpguest key*::
     usage: snpguest key $KEY_PATH $ROOT_KEY_SELECT [-g, --guest_field_select] [-s, --guest_svn] [-t, --tcb_version] [-v, --vmpl]
+    
     Creates the derived key based on input parameters and stores it.
     $KEY_PATH is the path to store the derived key.
     $ROOT_KEY_SELECT is the root key from which to derive the key. Input either "vcek" or "vmrk".
