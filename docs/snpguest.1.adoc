@@ -40,10 +40,10 @@ COMMANDS
     VMPL is an optional parameter and it defaults to 1.
     
     options:
-    -h, --help  show a help message
-    -p, --platform Use platform generated 64 bytes of data to pass for the report request
-    -r, --random  Generate 64 random bytes of data to pass for the report request
-    -v, --vmpl Specify a different vmpl level for the attestation report (defaults to 1)
+    -h, --help  show a help message.
+    -p, --platform Use platform generated 64 bytes of data to pass for the report request (Only available for Hyper-V).
+    -r, --random  Generate 64 random bytes of data to pass for the report request (Not available for Hyper-V).
+    -v, --vmpl Specify a different vmpl level for the attestation report (defaults to 1).
 
 *snpguest certificates*::
     usage: snpguest certificates $ENCODING $CERTS_DIR

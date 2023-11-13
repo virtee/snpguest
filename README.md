@@ -212,8 +212,8 @@ Arguments
 
 Options
 
-- `-r, --random`: Generate 64 random bytes of data for the report request. (Not used in Hyper-V)
-- `-p, --platform` : Use platform provided 64 bytes of data for the request report. 
+- `-r, --random`: Generate 64 random bytes of data for the report request (Not available for in Hyper-V).
+- `-p, --platform` : Use platform provided 64 bytes of data for the request report (Only available for Hyper-V).
 - `-v, --vmpl` : option specifies the VMPL level the Guest is running on and defaults to 1.
 
 Example
