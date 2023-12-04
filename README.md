@@ -344,9 +344,9 @@ snpguest verify attestation $CERTS_DIR $ATT_REPORT_PATH [-t, --tcb] [-s, --signa
 - **-q, --quiet**: Suppress console output.
 
 ## Extended Attestation Flowchart
-![alt text](https://github.com/AdithyaKrishnan/adi-snpguest/blob/main/docs/extended.PNG?raw=true)
+![alt text](https://github.com/virtee/snpguest/blob/main/docs/extended.PNG?raw=true)
 ## Regular Attestation Flowchart
-![alt text](https://github.com/AdithyaKrishnan/adi-snpguest/blob/main/docs/regular.PNG?raw=true)
+![alt text](https://github.com/virtee/snpguest/blob/main/docs/regular.PNG?raw=true)
 
 ## Building
 
