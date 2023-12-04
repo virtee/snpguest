@@ -1,6 +1,6 @@
 [package]
 name = "snpguest"
-version = "0.2.2"
+version = "0.2.3"
 authors = ["The VirTEE Project Developers"]
 edition = "2021"
 license = "Apache-2.0"
@@ -25,5 +25,5 @@ openssl = { version = "^0.10", features = ["vendored"]}
 reqwest = { version="0.11.10", features = ["blocking"] }
 hex = "0.4"
 x509-parser = { version="^0.14", features=["verify"] }
-asn1-rs = "*"
-rand = "*"
+asn1-rs = "0.5.2"
+rand = "0.8.5"
