@@ -26,6 +26,18 @@ pub enum FetchCmd {
 pub enum ProcType {
     Milan,
     Genoa,
+    Bergamo,
+    Siena,
+}
+
+impl ProcType {
+    fn to_kds_url(&self) -> String {
+        match self {
+            ProcType::Genoa | ProcType::Siena | ProcType::Bergamo => &ProcType::Genoa,
+            _ => self,
+        }
+        .to_string()
+    }
 }
 
 impl FromStr for ProcType {
@@ -34,6 +46,8 @@ impl FromStr for ProcType {
         match input.to_lowercase().as_str() {
             "milan" => Ok(ProcType::Milan),
             "genoa" => Ok(ProcType::Genoa),
+            "bergamo" => Ok(ProcType::Bergamo),
+            "siena" => Ok(ProcType::Siena),
             _ => Err(anyhow::anyhow!("Processor type not found!")),
         }
     }
@@ -44,6 +58,8 @@ impl fmt::Display for ProcType {
         match self {
             ProcType::Milan => write!(f, "Milan"),
             ProcType::Genoa => write!(f, "Genoa"),
+            ProcType::Bergamo => write!(f, "Bergamo"),
+            ProcType::Siena => write!(f, "Siena"),
         }
     }
 }
@@ -80,7 +96,10 @@ mod cert_authority {
         const KDS_CERT_CHAIN: &str = "cert_chain";
 
         // Should make -> https://kdsintf.amd.com/vcek/v1/{SEV_PROD_NAME}/cert_chain
-        let url: String = format!("{KDS_CERT_SITE}{KDS_VCEK}/{processor_model}/{KDS_CERT_CHAIN}");
+        let url: String = format!(
+            "{KDS_CERT_SITE}{KDS_VCEK}/{}/{KDS_CERT_CHAIN}",
+            processor_model.to_kds_url()
+        );
 
         let rsp: Response = get(url).context("Could not get certs from URL")?;
 
@@ -165,8 +184,9 @@ mod vcek {
         let hw_id: String = hex::encode(att_report.chip_id);
 
         let vcek_url: String = format!(
-            "{KDS_CERT_SITE}{KDS_VCEK}/{processor_model}/\
+            "{KDS_CERT_SITE}{KDS_VCEK}/{}/\
             {hw_id}?blSPL={:02}&teeSPL={:02}&snpSPL={:02}&ucodeSPL={:02}",
+            processor_model.to_kds_url(),
             att_report.reported_tcb.bootloader,
             att_report.reported_tcb.tee,
             att_report.reported_tcb.snp,
@@ -195,5 +215,22 @@ mod vcek {
         write_cert(vcek_path, &CertType::VCEK, &vcek, args.encoding)?;
 
         Ok(())
+    }
+}
+#[cfg(test)]
+mod tests {
+    use super::ProcType;
+
+    #[test]
+    fn test_kds_prod_name_milan_base() {
+        let milan_proc: ProcType = ProcType::Milan;
+        assert_eq!(milan_proc.to_kds_url(), ProcType::Milan.to_string());
+    }
+
+    #[test]
+    fn test_kds_prod_name_genoa_base() {
+        assert_eq!(ProcType::Genoa.to_kds_url(), ProcType::Genoa.to_string());
+        assert_eq!(ProcType::Siena.to_kds_url(), ProcType::Genoa.to_string());
+        assert_eq!(ProcType::Bergamo.to_kds_url(), ProcType::Genoa.to_string());
     }
 }
