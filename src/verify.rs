@@ -5,7 +5,10 @@ use super::*;
 
 use certs::{convert_path_to_cert, CertPaths};
 
-use std::{io::ErrorKind, path::PathBuf};
+use std::{
+    io::ErrorKind,
+    path::{Path, PathBuf},
+};
 
 use openssl::{ecdsa::EcdsaSig, sha::Sha384};
 use sev::certs::snp::Chain;
@@ -27,7 +30,7 @@ pub fn cmd(cmd: VerifyCmd, quiet: bool) -> Result<()> {
 }
 
 // Find a certificate in specified directory according to its extension
-pub fn find_cert_in_dir(dir: PathBuf, cert: &str) -> Result<PathBuf, anyhow::Error> {
+pub fn find_cert_in_dir(dir: &Path, cert: &str) -> Result<PathBuf, anyhow::Error> {
     if dir.join(format!("{cert}.pem")).exists() {
         Ok(dir.join(format!("{cert}.pem")))
     } else if dir.join(format!("{cert}.der")).exists() {
@@ -50,21 +53,28 @@ mod certificate_chain {
 
     // Function to validate certificate chain
     pub fn validate_cc(args: Args, quiet: bool) -> Result<()> {
-        let ark_path = find_cert_in_dir(args.certs_dir.clone(), "ark")?;
-        let ask_path = find_cert_in_dir(args.certs_dir.clone(), "ask")?;
-        let vcek_path = find_cert_in_dir(args.certs_dir, "vcek")?;
+        let ark_path = find_cert_in_dir(&args.certs_dir, "ark")?;
+        let ask_path = find_cert_in_dir(&args.certs_dir, "ask")?;
+        let mut vek_type: &str = "vcek";
+        let vek_path = match find_cert_in_dir(&args.certs_dir, "vlek") {
+            Ok(vlek_path) => {
+                vek_type = "vlek";
+                vlek_path
+            }
+            Err(_) => find_cert_in_dir(&args.certs_dir, "vcek")?,
+        };
 
         // Get a cert chain from directory
         let cert_chain: Chain = CertPaths {
             ark_path,
             ask_path,
-            vcek_path,
+            vek_path,
         }
         .try_into()?;
 
         let ark = cert_chain.ca.ark;
         let ask = cert_chain.ca.ask;
-        let vcek = cert_chain.vcek;
+        let vek = cert_chain.vek;
 
         // Verify each signature and print result in console
         match (&ark, &ark).verify() {
@@ -98,22 +108,19 @@ mod certificate_chain {
             },
         }
 
-        match (&ask, &vcek).verify() {
+        match (&ask, &vek).verify() {
             Ok(()) => {
                 if !quiet {
-                    println!("The VCEK was signed by the AMD ASK!");
+                    println!("The {vek_type} was signed by the AMD ASK!");
                 }
             }
             Err(e) => match e.kind() {
                 ErrorKind::Other => {
-                    return Err(anyhow::anyhow!("The VCEK was not signed by the AMD ASK!"))
-                }
-                _ => {
                     return Err(anyhow::anyhow!(
-                        "Failed to verify VCEK certificate: {:?}",
-                        e
+                        "The {vek_type} was not signed by the AMD ASK!"
                     ))
                 }
+                _ => return Err(anyhow::anyhow!("Failed to verify VEK certificate: {:?}", e)),
             },
         }
         Ok(())
@@ -125,9 +132,12 @@ mod attestation {
 
     use asn1_rs::{oid, FromDer, Oid};
 
-    use x509_parser::{self, certificate::X509Certificate, prelude::X509Extension};
+    use x509_parser::{self, certificate::X509Certificate, prelude::X509Extension, x509::X509Name};
 
-    use sev::{certs::snp::Certificate, firmware::guest::AttestationReport};
+    use sev::{
+        certs::snp::Certificate,
+        firmware::{guest::AttestationReport, host::CertType},
+    };
 
     enum SnpOid {
         BootLoader,
@@ -244,6 +254,27 @@ mod attestation {
         }
     }
 
+    fn parse_common_name(field: &X509Name<'_>) -> Result<CertType> {
+        if let Some(val) = field
+            .iter_common_name()
+            .next()
+            .and_then(|cn| cn.as_str().ok())
+        {
+            match val.to_lowercase() {
+                x if x.contains("ark") => Ok(CertType::ARK),
+                x if x.contains("ask") => Ok(CertType::ASK),
+                x if x.contains("vcek") => Ok(CertType::VCEK),
+                x if x.contains("vlek") => Ok(CertType::VLEK),
+                x if x.contains("crl") => Ok(CertType::CRL),
+                _ => Err(anyhow::anyhow!("Unknown certificate type encountered!")),
+            }
+        } else {
+            Err(anyhow::anyhow!(
+                "Certificate Subject Common Name is Unknown!"
+            ))
+        }
+    }
+
     fn verify_attestation_tcb(
         vcek: Certificate,
         att_report: AttestationReport,
@@ -257,6 +288,8 @@ mod attestation {
         let extensions: std::collections::HashMap<Oid, &X509Extension> = vcek_x509
             .extensions_map()
             .context("Failed getting VCEK oids.")?;
+
+        let common_name: CertType = parse_common_name(vcek_x509.subject())?;
 
         // Compare bootloaders
         if let Some(cert_bl) = extensions.get(&SnpOid::BootLoader.oid()) {
@@ -308,15 +341,17 @@ mod attestation {
             }
         }
 
-        // Compare HWID information
-        if let Some(cert_hwid) = extensions.get(&SnpOid::HwId.oid()) {
-            if !check_cert_bytes(cert_hwid, &att_report.chip_id) {
-                return Err(anyhow::anyhow!(
-                    "Report TCB ID and Certificate ID mismatch encountered."
-                ));
-            }
-            if !quiet {
-                println!("Chip ID from certificate matches the attestation report.");
+        // Compare HWID information only on VCEK
+        if common_name == CertType::VCEK {
+            if let Some(cert_hwid) = extensions.get(&SnpOid::HwId.oid()) {
+                if !check_cert_bytes(cert_hwid, &att_report.chip_id) {
+                    return Err(anyhow::anyhow!(
+                        "Report TCB ID and Certificate ID mismatch encountered."
+                    ));
+                }
+                if !quiet {
+                    println!("Chip ID from certificate matches the attestation report.");
+                }
             }
         }
 
@@ -333,7 +368,7 @@ mod attestation {
         };
 
         // Get VCEK and grab its public key
-        let vcek_path = find_cert_in_dir(args.certs_dir, "vcek")?;
+        let vcek_path = find_cert_in_dir(&args.certs_dir, "vcek")?;
         let vcek = convert_path_to_cert(&vcek_path, "vcek")?;
 
         if args.tcb || args.signature {

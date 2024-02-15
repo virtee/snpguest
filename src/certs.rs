@@ -20,7 +20,7 @@ use openssl::x509::X509;
 pub struct CertPaths {
     pub ark_path: PathBuf,
     pub ask_path: PathBuf,
-    pub vcek_path: PathBuf,
+    pub vek_path: PathBuf,
 }
 #[derive(StructOpt, Clone, Copy)]
 pub enum CertFormat {
@@ -103,9 +103,18 @@ pub fn convert_path_to_cert(
 impl TryFrom<CertPaths> for Chain {
     type Error = anyhow::Error;
     fn try_from(content: CertPaths) -> Result<Self, Self::Error> {
-        let ark_cert = convert_path_to_cert(&content.ark_path, "ark")?;
-        let ask_cert = convert_path_to_cert(&content.ask_path, "ask")?;
-        let vcek_cert = convert_path_to_cert(&content.vcek_path, "vcek")?;
+        let ark_cert: Certificate = convert_path_to_cert(&content.ark_path, "ark")?;
+        let ask_cert: Certificate = convert_path_to_cert(&content.ask_path, "ask")?;
+        let vek_cert: Certificate = if content
+            .vek_path
+            .to_string_lossy()
+            .to_lowercase()
+            .contains("vlek")
+        {
+            convert_path_to_cert(&content.vek_path, "vlek")?
+        } else {
+            convert_path_to_cert(&content.vek_path, "vcek")?
+        };
 
         let ca_chain = ca::Chain {
             ark: ark_cert,
@@ -114,7 +123,7 @@ impl TryFrom<CertPaths> for Chain {
 
         Ok(Chain {
             ca: ca_chain,
-            vcek: vcek_cert,
+            vek: vek_cert,
         })
     }
 }
@@ -196,23 +205,20 @@ pub fn get_ext_certs(args: CertificatesArgs) -> Result<()> {
         .get_ext_report(None, Some(request_data), None)
         .context("Failed to get extended report.")?;
 
-    // Check if the returned table is empty
-    if certificates.is_empty() {
-        return Err(anyhow::anyhow!(
-            "The certificate chain is empty! Certificates probably not loaded by the host."
-        ));
-    }
-
     // Create certificate directory if missing
     if !args.certs_dir.exists() {
         fs::create_dir(args.certs_dir.clone()).context("Could not create certs folder")?;
     };
 
-    // Write certs into directory
-    for cert in certificates.iter() {
-        let path = args.certs_dir.clone();
+    // If certificates are present, write certs into directory
+    if let Some(ref certificates) = certificates {
+        for cert in certificates.iter() {
+            let path = args.certs_dir.clone();
 
-        write_cert(path, &cert.cert_type, &cert.data, args.encoding)?;
+            write_cert(path, &cert.cert_type, &cert.data, args.encoding)?;
+        }
+    } else {
+        eprintln!("No certificates were loaded by the host...");
     }
 
     Ok(())
