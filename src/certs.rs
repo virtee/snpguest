@@ -6,7 +6,7 @@ use super::*;
 use std::{
     fs,
     io::{ErrorKind, Read, Write},
-    path::PathBuf,
+    path::{Path, PathBuf},
     str::FromStr,
 };
 
@@ -14,8 +14,6 @@ use sev::{
     certs::snp::{ca, Certificate, Chain},
     firmware::{guest::Firmware, host::CertType},
 };
-
-use openssl::x509::X509;
 
 pub struct CertPaths {
     pub ark_path: PathBuf,
@@ -31,6 +29,15 @@ pub enum CertFormat {
     Der,
 }
 
+impl std::fmt::Display for CertFormat {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            CertFormat::Pem => write!(f, "pem"),
+            CertFormat::Der => write!(f, "der"),
+        }
+    }
+}
+
 impl FromStr for CertFormat {
     type Err = anyhow::Error;
     fn from_str(input: &str) -> Result<CertFormat, anyhow::Error> {
@@ -39,20 +46,6 @@ impl FromStr for CertFormat {
             "der" => Ok(CertFormat::Der),
             _ => Err(anyhow::anyhow!("Invalid Cert Format!")),
         }
-    }
-}
-
-// Function to check if certificate is in .der or .pem depending on its contents
-fn identify_cert(buf: &[u8]) -> CertFormat {
-    // Pem certificates will start with this byte content
-    const PEM_START: &[u8] = &[
-        45, 45, 45, 45, 45, 66, 69, 71, 73, 78, 32, 67, 69, 82, 84, 73, 70, 73, 67, 65, 84, 69, 45,
-        45, 45, 45, 45,
-    ];
-
-    match buf {
-        PEM_START => CertFormat::Pem,
-        _ => CertFormat::Der,
     }
 }
 
@@ -89,14 +82,7 @@ pub fn convert_path_to_cert(
         .read_to_end(&mut buf)
         .context(format!("Could not read contents of {cert_type} file"))?;
 
-    let cert = match identify_cert(&buf[0..27]) {
-        CertFormat::Pem => Certificate::from_pem(&buf)
-            .context(format!("Could not convert {cert_type} data into X509"))?,
-        CertFormat::Der => Certificate::from_der(&buf)
-            .context(format!("Could not convert {cert_type} data into X509"))?,
-    };
-
-    Ok(cert)
+    Ok(Certificate::from_bytes(&buf)?)
 }
 
 // Tryfrom function that takes in 3 certificate paths returns a snp Certificate Chain
@@ -128,53 +114,38 @@ impl TryFrom<CertPaths> for Chain {
     }
 }
 
-fn translate_cert(data: &[u8], cert_encoding: CertFormat) -> Vec<u8> {
-    match (identify_cert(&data[0..27]), cert_encoding) {
-        (CertFormat::Pem, CertFormat::Der) => X509::from_pem(data)
-            .expect("Failed to parse the certificate")
-            .to_der()
-            .expect("Failed to convert to DER encoding"),
-        (CertFormat::Der, CertFormat::Pem) => X509::from_der(data)
-            .expect("Failed to parse the certificate")
-            .to_pem()
-            .expect("Failed to convert to PEM encoding"),
-        _ => Vec::from(data),
-    }
-}
-
 // Function used to write provided cert into desired directory.
 pub fn write_cert(
-    mut path: PathBuf,
+    path: &Path,
     cert_type: &CertType,
     data: &[u8],
     encoding: CertFormat,
 ) -> Result<()> {
     // Get cert type into str
-    let cert_str = match cert_type {
-        CertType::ARK => "ark",
-        CertType::ASK => "ask",
-        CertType::VCEK => "vcek",
-        _ => return Err(anyhow::anyhow!("Invalid cert type")),
+    let cert: Certificate = Certificate::from_bytes(data)?;
+    let cert_str: String = cert_type.to_string();
+    let bytes: Vec<u8>;
+
+    match encoding {
+        CertFormat::Pem => {
+            bytes = cert.to_pem()?;
+        }
+        CertFormat::Der => {
+            bytes = cert.to_der()?;
+        }
     };
 
-    let file_ext: &str = match encoding {
-        CertFormat::Pem => "pem",
-        CertFormat::Der => "der",
-    };
-
-    path.push(format!("{}.{}", cert_str, file_ext));
-
-    let bytes: Vec<u8> = translate_cert(data, encoding);
+    let cert_path: PathBuf = path.join(format!("{cert_str}.{encoding}"));
 
     // Write cert into directory
-    let mut file = if path.exists() {
+    let mut file = if cert_path.exists() {
         std::fs::OpenOptions::new()
             .write(true)
             .truncate(true)
-            .open(path)
-            .context(format!("Unable to overwrite {} cert contents", cert_str))?
+            .open(cert_path)
+            .context(format!("Unable to overwrite {cert_str} cert contents"))?
     } else {
-        fs::File::create(path).context(format!("Unable to create {} certificate", cert_str))?
+        fs::File::create(cert_path).context(format!("Unable to create {cert_str} certificate"))?
     };
 
     file.write(&bytes)
@@ -207,15 +178,13 @@ pub fn get_ext_certs(args: CertificatesArgs) -> Result<()> {
 
     // Create certificate directory if missing
     if !args.certs_dir.exists() {
-        fs::create_dir(args.certs_dir.clone()).context("Could not create certs folder")?;
+        fs::create_dir(&args.certs_dir).context("Could not create certs folder")?;
     };
 
     // If certificates are present, write certs into directory
     if let Some(ref certificates) = certificates {
         for cert in certificates.iter() {
-            let path = args.certs_dir.clone();
-
-            write_cert(path, &cert.cert_type, &cert.data, args.encoding)?;
+            write_cert(&args.certs_dir, &cert.cert_type, &cert.data, args.encoding)?;
         }
     } else {
         eprintln!("No certificates were loaded by the host...");

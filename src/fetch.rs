@@ -74,6 +74,7 @@ pub fn cmd(cmd: FetchCmd) -> Result<()> {
 mod cert_authority {
     use super::*;
     use openssl::x509::X509;
+    use reqwest::StatusCode;
 
     #[derive(StructOpt)]
     pub struct Args {
@@ -101,17 +102,22 @@ mod cert_authority {
             processor_model.to_kds_url()
         );
 
-        let rsp: Response = get(url).context("Could not get certs from URL")?;
+        let rsp: Response = get(url).context("Unable to send request for certs to URL")?;
 
-        // Parse response
-        let body = rsp
-            .bytes()
-            .context("Unable to parse AMD certificate chain")?
-            .to_vec();
+        match rsp.status() {
+            StatusCode::OK => {
+                // Parse the request
+                let body = rsp
+                    .bytes()
+                    .context("Unable to parse AMD certificate chain")?
+                    .to_vec();
 
-        let certificates = X509::stack_from_pem(&body)?;
+                let certificates = X509::stack_from_pem(&body)?;
 
-        Ok(certificates)
+                Ok(certificates)
+            }
+            status => Err(anyhow::anyhow!("Unable to fetch certificate: {:?}", status)),
+        }
     }
 
     // Fetch the ca from the kds and write it into the certs directory
@@ -121,20 +127,20 @@ mod cert_authority {
 
         // Create certs directory if missing
         if !args.certs_dir.exists() {
-            fs::create_dir(args.certs_dir.clone()).context("Could not create certs folder")?;
+            fs::create_dir(&args.certs_dir).context("Could not create certs folder")?;
         }
 
         let ark_cert = &certificates[1];
         let ask_cert = &certificates[0];
 
         write_cert(
-            args.certs_dir.clone(),
+            &args.certs_dir,
             &CertType::ARK,
             &ark_cert.to_pem()?,
             args.encoding,
         )?;
         write_cert(
-            args.certs_dir.clone(),
+            &args.certs_dir,
             &CertType::ASK,
             &ask_cert.to_pem()?,
             args.encoding,
@@ -145,6 +151,8 @@ mod cert_authority {
 }
 
 mod vcek {
+    use reqwest::StatusCode;
+
     use super::*;
 
     #[derive(StructOpt)]
@@ -194,11 +202,16 @@ mod vcek {
         );
 
         // VCEK in DER format
-        let vcek_rsp = get(vcek_url).context("Could not get VCEK from URL")?;
+        let vcek_rsp: Response = get(vcek_url).context("Unable to send request for VCEK")?;
 
-        let vcek_rsp_bytes = vcek_rsp.bytes().context("Unable to parse VCEK")?.to_vec();
-
-        Ok(vcek_rsp_bytes)
+        match vcek_rsp.status() {
+            StatusCode::OK => {
+                let vcek_rsp_bytes: Vec<u8> =
+                    vcek_rsp.bytes().context("Unable to parse VCEK")?.to_vec();
+                Ok(vcek_rsp_bytes)
+            }
+            status => Err(anyhow::anyhow!("Unable to fetch VCEK from URL: {status:?}")),
+        }
     }
 
     // Function to request vcek from kds and write it into file
@@ -207,12 +220,10 @@ mod vcek {
         let vcek = request_vcek_kds(args.processor_model, args.att_report_path)?;
 
         if !args.certs_dir.exists() {
-            fs::create_dir(args.certs_dir.clone()).context("Could not create certs folder")?;
+            fs::create_dir(&args.certs_dir).context("Could not create certs folder")?;
         }
 
-        let vcek_path = args.certs_dir.clone();
-
-        write_cert(vcek_path, &CertType::VCEK, &vcek, args.encoding)?;
+        write_cert(&args.certs_dir, &CertType::VCEK, &vcek, args.encoding)?;
 
         Ok(())
     }
