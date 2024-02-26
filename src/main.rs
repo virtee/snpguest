@@ -62,7 +62,7 @@ fn main() -> Result<()> {
     let snpguest = SnpGuest::from_args();
 
     #[cfg(feature = "hyperv")]
-    let hv = hyperv::present;
+    let hv = hyperv::present();
 
     #[cfg(not(feature = "hyperv"))]
     let hv = false;
