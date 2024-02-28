@@ -25,7 +25,7 @@ pub enum VerifyCmd {
 pub fn cmd(cmd: VerifyCmd, quiet: bool) -> Result<()> {
     match cmd {
         VerifyCmd::Certs(args) => certificate_chain::validate_cc(args, quiet),
-        VerifyCmd::Attestation(args) => attestation::verify_attesation(args, quiet),
+        VerifyCmd::Attestation(args) => attestation::verify_attestation(args, quiet),
     }
 }
 
@@ -372,7 +372,7 @@ mod attestation {
         Ok(())
     }
 
-    pub fn verify_attesation(args: Args, quiet: bool) -> Result<()> {
+    pub fn verify_attestation(args: Args, quiet: bool) -> Result<()> {
         // Get attestation report
         let att_report = if !args.att_report_path.exists() {
             return Err(anyhow::anyhow!("No attestation report was found. Provide an attestation report to request VCEK from the KDS."));
