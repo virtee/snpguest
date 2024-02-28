@@ -1,6 +1,6 @@
 [package]
 name = "snpguest"
-version = "0.3.1"
+version = "0.4.0"
 authors = ["The VirTEE Project Developers"]
 edition = "2021"
 license = "Apache-2.0"
@@ -22,7 +22,7 @@ hyperv = ["tss-esapi"]
 structopt = "0.3"
 env_logger = "0.10.0"
 anyhow = "1.0.69"
-sev = { version = "^3.0.0", default-features = false, features = ['openssl','snp']}
+sev = { version = "^3.1.1", default-features = false, features = ['openssl','snp']}
 nix = "^0.23"
 serde = { version = "1.0", features = ["derive"] }
 bincode = "^1.2.1"

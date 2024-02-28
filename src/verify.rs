@@ -54,14 +54,16 @@ mod certificate_chain {
     // Function to validate certificate chain
     pub fn validate_cc(args: Args, quiet: bool) -> Result<()> {
         let ark_path = find_cert_in_dir(&args.certs_dir, "ark")?;
-        let ask_path = find_cert_in_dir(&args.certs_dir, "ask")?;
-        let mut vek_type: &str = "vcek";
-        let vek_path = match find_cert_in_dir(&args.certs_dir, "vlek") {
+        let (mut vek_type, mut sign_type): (&str, &str) = ("vcek", "ask");
+        let (vek_path, ask_path) = match find_cert_in_dir(&args.certs_dir, "vlek") {
             Ok(vlek_path) => {
-                vek_type = "vlek";
-                vlek_path
+                (vek_type, sign_type) = ("vlek", "asvk");
+                (vlek_path, find_cert_in_dir(&args.certs_dir, sign_type)?)
             }
-            Err(_) => find_cert_in_dir(&args.certs_dir, "vcek")?,
+            Err(_) => (
+                find_cert_in_dir(&args.certs_dir, vek_type)?,
+                find_cert_in_dir(&args.certs_dir, sign_type)?,
+            ),
         };
 
         // Get a cert chain from directory
@@ -97,12 +99,18 @@ mod certificate_chain {
         match (&ark, &ask).verify() {
             Ok(()) => {
                 if !quiet {
-                    println!("The AMD ASK was signed by the AMD ARK!");
+                    println!(
+                        "The AMD {} was signed by the AMD ARK!",
+                        sign_type.to_uppercase()
+                    );
                 }
             }
             Err(e) => match e.kind() {
                 ErrorKind::Other => {
-                    return Err(anyhow::anyhow!("The AMD ASK ws not signed by the AMD ARK!"))
+                    return Err(anyhow::anyhow!(
+                        "The AMD {} was not signed by the AMD ARK!",
+                        sign_type.to_uppercase()
+                    ))
                 }
                 _ => return Err(anyhow::anyhow!("Failed to verify ASK certificate: {:?}", e)),
             },
@@ -111,13 +119,19 @@ mod certificate_chain {
         match (&ask, &vek).verify() {
             Ok(()) => {
                 if !quiet {
-                    println!("The {vek_type} was signed by the AMD ASK!");
+                    println!(
+                        "The {} was signed by the AMD {}!",
+                        vek_type.to_uppercase(),
+                        sign_type.to_uppercase()
+                    );
                 }
             }
             Err(e) => match e.kind() {
                 ErrorKind::Other => {
                     return Err(anyhow::anyhow!(
-                        "The {vek_type} was not signed by the AMD ASK!"
+                        "The {} was not signed by the AMD {}!",
+                        vek_type.to_uppercase(),
+                        sign_type.to_uppercase(),
                     ))
                 }
                 _ => return Err(anyhow::anyhow!("Failed to verify VEK certificate: {:?}", e)),
