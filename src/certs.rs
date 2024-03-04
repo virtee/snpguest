@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 // This file contains code related to managing certificates. It defines a structure for managing certificate paths (`CertPaths`) and functions for obtaining extended certificates from the AMD Secure Processor.
 
+use crate::fetch::Endorsement;
+
 use super::*;
 
 use std::{
@@ -120,19 +122,27 @@ pub fn write_cert(
     cert_type: &CertType,
     data: &[u8],
     encoding: CertFormat,
+    endorser: &Endorsement,
 ) -> Result<()> {
     // Get cert type into str
     let cert: Certificate = Certificate::from_bytes(data)?;
-    let cert_str: String = cert_type.to_string();
-    let bytes: Vec<u8>;
 
-    match encoding {
-        CertFormat::Pem => {
-            bytes = cert.to_pem()?;
-        }
-        CertFormat::Der => {
-            bytes = cert.to_der()?;
-        }
+    let cert_str: String = match (cert_type, endorser) {
+        (CertType::ASK, Endorsement::Vlek) => "asvk".to_string(),
+        (_, _) => match cert_type {
+            CertType::Empty => "empty".to_string(),
+            CertType::ARK => "ark".to_string(),
+            CertType::ASK => "ask".to_string(),
+            CertType::VCEK => "vcek".to_string(),
+            CertType::VLEK => "vlek".to_string(),
+            CertType::CRL => "crl".to_string(),
+            CertType::OTHER(uuid) => format!("other-{uuid}"),
+        },
+    };
+
+    let bytes: Vec<u8> = match encoding {
+        CertFormat::Pem => cert.to_pem()?,
+        CertFormat::Der => cert.to_der()?,
     };
 
     let cert_path: PathBuf = path.join(format!("{cert_str}.{encoding}"));
@@ -169,10 +179,10 @@ pub fn get_ext_certs(args: CertificatesArgs) -> Result<()> {
     let mut sev_fw: Firmware = Firmware::open().context("failed to open SEV firmware device.")?;
 
     // Generate random request data
-    let request_data = report::create_random_request();
+    let request_data: [u8; 64] = report::create_random_request();
 
     // Request extended attestation report
-    let (_, certificates) = sev_fw
+    let (_, mut certificates) = sev_fw
         .get_ext_report(None, Some(request_data), None)
         .context("Failed to get extended report.")?;
 
@@ -182,10 +192,22 @@ pub fn get_ext_certs(args: CertificatesArgs) -> Result<()> {
     };
 
     // If certificates are present, write certs into directory
-    if let Some(ref certificates) = certificates {
-        for cert in certificates.iter() {
-            write_cert(&args.certs_dir, &cert.cert_type, &cert.data, args.encoding)?;
-        }
+    if let Some(ref mut certificates) = certificates {
+        // Unless VLEK is encountered, assume VCEK style endorsement with ASK.
+        let mut endorsement: Endorsement = Endorsement::Vcek;
+
+        certificates.iter().try_for_each(|cert| {
+            if cert.cert_type == CertType::VLEK {
+                endorsement = Endorsement::Vlek;
+            }
+            write_cert(
+                &args.certs_dir,
+                &cert.cert_type,
+                &cert.data,
+                args.encoding,
+                &endorsement,
+            )
+        })?;
     } else {
         eprintln!("No certificates were loaded by the host...");
     }

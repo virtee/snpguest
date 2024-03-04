@@ -22,6 +22,32 @@ pub enum FetchCmd {
     Vcek(vcek::Args),
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Endorsement {
+    Vcek,
+    Vlek,
+}
+
+impl fmt::Display for Endorsement {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Endorsement::Vcek => write!(f, "VCEK"),
+            Endorsement::Vlek => write!(f, "VLEK"),
+        }
+    }
+}
+
+impl FromStr for Endorsement {
+    type Err = anyhow::Error;
+
+    fn from_str(s: &str) -> std::prelude::v1::Result<Self, Self::Err> {
+        match s.to_lowercase().as_str() {
+            "vcek" => Ok(Self::Vcek),
+            "vlek" => Ok(Self::Vlek),
+            _ => Err(anyhow::anyhow!("Endorsement type not found!")),
+        }
+    }
+}
 #[derive(Debug, Clone)]
 pub enum ProcType {
     Milan,
@@ -88,17 +114,27 @@ mod cert_authority {
 
         #[structopt(help = "Directory to store the certificates in.")]
         pub certs_dir: PathBuf,
+
+        #[structopt(
+            long,
+            short,
+            default_value = "vcek",
+            help = "Specify to pull the VLEK certificate chain instead of VCEK."
+        )]
+        pub endorser: Endorsement,
     }
 
     // Function to build kds request for ca chain and return a vector with the 2 certs (ASK & ARK)
-    pub fn request_ca_kds(processor_model: ProcType) -> Result<Vec<X509>, anyhow::Error> {
+    pub fn request_ca_kds(
+        processor_model: ProcType,
+        endorser: &Endorsement,
+    ) -> Result<Vec<X509>, anyhow::Error> {
         const KDS_CERT_SITE: &str = "https://kdsintf.amd.com";
-        const KDS_VCEK: &str = "/vcek/v1";
         const KDS_CERT_CHAIN: &str = "cert_chain";
 
         // Should make -> https://kdsintf.amd.com/vcek/v1/{SEV_PROD_NAME}/cert_chain
         let url: String = format!(
-            "{KDS_CERT_SITE}{KDS_VCEK}/{}/{KDS_CERT_CHAIN}",
+            "{KDS_CERT_SITE}/{endorser}/v1/{}/{KDS_CERT_CHAIN}",
             processor_model.to_kds_url()
         );
 
@@ -123,7 +159,7 @@ mod cert_authority {
     // Fetch the ca from the kds and write it into the certs directory
     pub fn fetch_ca(args: Args) -> Result<()> {
         // Get certs from kds
-        let certificates = request_ca_kds(args.processor_model)?;
+        let certificates = request_ca_kds(args.processor_model, &args.endorser)?;
 
         // Create certs directory if missing
         if !args.certs_dir.exists() {
@@ -138,12 +174,14 @@ mod cert_authority {
             &CertType::ARK,
             &ark_cert.to_pem()?,
             args.encoding,
+            &args.endorser,
         )?;
         write_cert(
             &args.certs_dir,
             &CertType::ASK,
             &ask_cert.to_pem()?,
             args.encoding,
+            &args.endorser,
         )?;
 
         Ok(())
@@ -223,7 +261,13 @@ mod vcek {
             fs::create_dir(&args.certs_dir).context("Could not create certs folder")?;
         }
 
-        write_cert(&args.certs_dir, &CertType::VCEK, &vcek, args.encoding)?;
+        write_cert(
+            &args.certs_dir,
+            &CertType::VCEK,
+            &vcek,
+            args.encoding,
+            &Endorsement::Vcek,
+        )?;
 
         Ok(())
     }

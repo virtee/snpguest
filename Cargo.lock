@@ -1346,9 +1346,9 @@ dependencies = [
 
 [[package]]
 name = "sev"
-version = "3.0.0"
+version = "3.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "210c2ddcae6f3ca89e9f78449479e4e2f0d8b9ea68e4415e4d5daeb3e6fcedb8"
+checksum = "b2890179f8ef689340f441ba05f0b268bc14f672ae4b36d629cc2266d0d747ab"
 dependencies = [
  "base64 0.21.7",
  "bincode",
@@ -1380,7 +1380,7 @@ dependencies = [
 
 [[package]]
 name = "snpguest"
-version = "0.3.1"
+version = "0.4.0"
 dependencies = [
  "anyhow",
  "asn1-rs",
