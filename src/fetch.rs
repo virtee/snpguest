@@ -134,7 +134,8 @@ mod cert_authority {
 
         // Should make -> https://kdsintf.amd.com/vcek/v1/{SEV_PROD_NAME}/cert_chain
         let url: String = format!(
-            "{KDS_CERT_SITE}/{endorser}/v1/{}/{KDS_CERT_CHAIN}",
+            "{KDS_CERT_SITE}/{}/v1/{}/{KDS_CERT_CHAIN}",
+            endorser.to_string().to_lowercase(),
             processor_model.to_kds_url()
         );
 
