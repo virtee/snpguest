@@ -35,28 +35,27 @@ enum TestState {
 bitfield! {
     #[repr(C)]
     #[derive(Default, Copy, Clone, PartialEq, Eq, Serialize, Deserialize)]
-    pub struct BitRead(u64);
+    pub struct SevStatus(u64);
     impl Debug;
-    pub sev_bit, _: 0,0;
-    pub es_bit, _: 1,1;
-    pub snp_bit, _:2,2;
-}
-
-enum GuestLevels {
-    Sev,
-    SevEs,
-    Snp,
-}
-
-impl fmt::Display for GuestLevels {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let s = match self {
-            GuestLevels::Sev => "SEV",
-            GuestLevels::SevEs => "SEV-ES",
-            GuestLevels::Snp => "SNP",
-        };
-        write!(f, "{}", s)
-    }
+    pub sev_bit, _ : 0,0;
+    pub es_bit, _ : 1,1;
+    pub snp_bit, _ : 2,2;
+    pub vtom_bit, _ : 3,3;
+    pub reflectvc_bit, _ : 4,4;
+    pub restricted_injection_bit, _ : 5,5;
+    pub alternate_injection_bit, _ : 6,6;
+    pub debug_swap_bit, _ : 7,7;
+    pub prevent_host_ibs_bit, _ : 8,8;
+    pub btb_isolation_bit, _ : 9,9;
+    pub vmpl_sss_bit, _ : 10,10;
+    pub secure_tse_bit, _ : 11,11;
+    pub vmg_exit_parameter_bit, _ : 12,12;
+    reserved_1, _ : 13, 13;
+    pub ibs_virtualization_bit, _ : 14,14;
+    reserved_2, _ : 15,15;
+    pub vmsa_reg_prot_bit, _ : 16,16;
+    pub smt_protection_bit, _ : 17, 17;
+    reserved_3, _ : 18, 63;
 }
 
 impl fmt::Display for TestState {
@@ -72,24 +71,174 @@ impl fmt::Display for TestState {
 }
 
 fn collect_tests() -> Vec<Test> {
+    // Grab your MSR value one time.
+    let temp_bitfield = match get_values(0xC0010131, 0) {
+        Ok(temp_bitfield) => temp_bitfield,
+        Err(e) => {
+            return vec![Test {
+                name: "Error reading MSR",
+                gen_mask: SEV_MASK,
+                run: Box::new(move || TestResult {
+                    name: "Error reading MSR".to_string(),
+                    stat: TestState::Fail,
+                    mesg: Some(format!("Failed to get bit values, {e}")),
+                }),
+                sub: vec![],
+            }]
+        }
+    };
+
     let tests = vec![
         Test {
             name: "SEV",
             gen_mask: SEV_MASK,
-            run: Box::new(|| encryption_levels(GuestLevels::Sev)),
+            run: Box::new(move || run_msr_check(temp_bitfield.sev_bit(), "SEV", false)),
             sub: vec![],
         },
         Test {
             name: "SEV-ES",
             gen_mask: ES_MASK,
-            run: Box::new(|| encryption_levels(GuestLevels::SevEs)),
+            run: Box::new(move || run_msr_check(temp_bitfield.es_bit(), "SEV-ES", false)),
             sub: vec![],
         },
         Test {
             name: "SNP",
             gen_mask: SNP_MASK,
-            run: Box::new(|| encryption_levels(GuestLevels::Snp)),
+            run: Box::new(move || run_msr_check(temp_bitfield.snp_bit(), "SNP", false)),
             sub: vec![],
+        },
+        Test {
+            name: "Optional Features",
+            gen_mask: SEV_MASK,
+            run: Box::new(|| TestResult {
+                name: "Optional Features statuses:".to_string(),
+                stat: TestState::Pass,
+                mesg: None,
+            }),
+            sub: vec![
+                Test {
+                    name: "vTOM",
+                    gen_mask: SNP_MASK,
+                    run: Box::new(move || run_msr_check(temp_bitfield.vtom_bit(), "VTOM", true)),
+                    sub: vec![],
+                },
+                Test {
+                    name: "Reflect VC",
+                    gen_mask: SNP_MASK,
+                    run: Box::new(move || {
+                        run_msr_check(temp_bitfield.reflectvc_bit(), "ReflectVC", true)
+                    }),
+                    sub: vec![],
+                },
+                Test {
+                    name: "Restricted Injection",
+                    gen_mask: SNP_MASK,
+                    run: Box::new(move || {
+                        run_msr_check(
+                            temp_bitfield.restricted_injection_bit(),
+                            "Restricted Injection",
+                            true,
+                        )
+                    }),
+                    sub: vec![],
+                },
+                Test {
+                    name: "Alternate Injection",
+                    gen_mask: SNP_MASK,
+                    run: Box::new(move || {
+                        run_msr_check(
+                            temp_bitfield.alternate_injection_bit(),
+                            "Alternate Injection",
+                            true,
+                        )
+                    }),
+                    sub: vec![],
+                },
+                Test {
+                    name: "Debug Swap",
+                    gen_mask: SNP_MASK,
+                    run: Box::new(move || {
+                        run_msr_check(temp_bitfield.debug_swap_bit(), "Debug Swap", true)
+                    }),
+                    sub: vec![],
+                },
+                Test {
+                    name: "Prevent Host IBS",
+                    gen_mask: SNP_MASK,
+                    run: Box::new(move || {
+                        run_msr_check(
+                            temp_bitfield.prevent_host_ibs_bit(),
+                            "Prevent Host IBS",
+                            true,
+                        )
+                    }),
+                    sub: vec![],
+                },
+                Test {
+                    name: "SNP BTB Isolation",
+                    gen_mask: SNP_MASK,
+                    run: Box::new(move || {
+                        run_msr_check(temp_bitfield.btb_isolation_bit(), "SNP BTB Isolation", true)
+                    }),
+                    sub: vec![],
+                },
+                Test {
+                    name: "VMPL SSS",
+                    gen_mask: SNP_MASK,
+                    run: Box::new(move || {
+                        run_msr_check(temp_bitfield.vmpl_sss_bit(), "VMPL SSS", true)
+                    }),
+                    sub: vec![],
+                },
+                Test {
+                    name: "Secure TSE",
+                    gen_mask: SNP_MASK,
+                    run: Box::new(move || {
+                        run_msr_check(temp_bitfield.secure_tse_bit(), "Secure TSE", true)
+                    }),
+                    sub: vec![],
+                },
+                Test {
+                    name: "VMG Exit Parameter",
+                    gen_mask: SNP_MASK,
+                    run: Box::new(move || {
+                        run_msr_check(
+                            temp_bitfield.vmg_exit_parameter_bit(),
+                            "VMG Exit Parameter",
+                            true,
+                        )
+                    }),
+                    sub: vec![],
+                },
+                Test {
+                    name: "IBS Virtualization",
+                    gen_mask: SNP_MASK,
+                    run: Box::new(move || {
+                        run_msr_check(
+                            temp_bitfield.ibs_virtualization_bit(),
+                            "IBS Virtualization",
+                            true,
+                        )
+                    }),
+                    sub: vec![],
+                },
+                Test {
+                    name: "VMSA Reg Prot",
+                    gen_mask: SNP_MASK,
+                    run: Box::new(move || {
+                        run_msr_check(temp_bitfield.vmsa_reg_prot_bit(), "VMSA Reg Prot", true)
+                    }),
+                    sub: vec![],
+                },
+                Test {
+                    name: "SMT Protection",
+                    gen_mask: SNP_MASK,
+                    run: Box::new(move || {
+                        run_msr_check(temp_bitfield.smt_protection_bit(), "SMT Protection", true)
+                    }),
+                    sub: vec![],
+                },
+            ],
         },
     ];
     tests
@@ -104,7 +253,7 @@ pub fn cmd(quiet: bool) -> Result<()> {
         Ok(())
     } else {
         Err(anyhow::anyhow!(
-            "One or more tests in sevctl-ok reported a failure"
+            "One or more tests in snpguest-ok reported a failure"
         ))
     }
 }
@@ -196,90 +345,26 @@ fn emit_skip(tests: &[Test], level: usize, quiet: bool) {
     }
 }
 
-fn get_values(reg: u32, cpu: u16) -> Result<BitRead, anyhow::Error> {
+fn get_values(reg: u32, cpu: u16) -> Result<SevStatus, anyhow::Error> {
     let mut msr = Msr::new(reg, cpu).context("Error Reading MSR")?;
-    let my_bitfield = BitRead(msr.read()?);
+    let my_bitfield = SevStatus(msr.read()?);
     Ok(my_bitfield)
 }
 
-fn encryption_levels(test: GuestLevels) -> TestResult {
-    let temp_bitfield = match get_values(0xC0010131, 0) {
-        Ok(temp_bitfield) => temp_bitfield,
-        Err(e) => {
-            return TestResult {
-                name: test.to_string(),
-                stat: TestState::Fail,
-                mesg: Some(format!("Failed to get bit values, {e}")),
-            }
-        }
-    };
+fn run_msr_check(check_bit: u64, sev_feature: &str, optional_field: bool) -> TestResult {
+    let mut status = TestState::Fail;
+    let mut message = "DISABLED".to_string();
 
-    match test {
-        GuestLevels::Sev => {
-            let sev_status = temp_bitfield.sev_bit();
-            if sev_status == 1 {
-                TestResult {
-                    name: format!("{}", GuestLevels::Sev),
-                    stat: TestState::Pass,
-                    mesg: Some("SEV is ENABLED".to_string()),
-                }
-            } else if sev_status == 0 {
-                TestResult {
-                    name: format!("{}", GuestLevels::Sev),
-                    stat: TestState::Fail,
-                    mesg: Some("SEV is DISABLED".to_string()),
-                }
-            } else {
-                TestResult {
-                    name: format!("{}", GuestLevels::Sev),
-                    stat: TestState::Fail,
-                    mesg: format!("Invalid value found in MSR, {}", sev_status).into(),
-                }
-            }
-        }
-        GuestLevels::SevEs => {
-            let sev_es_status = temp_bitfield.es_bit();
-            if sev_es_status == 1 {
-                TestResult {
-                    name: format!("{}", GuestLevels::SevEs),
-                    stat: TestState::Pass,
-                    mesg: Some("SEV-ES is ENABLED".to_string()),
-                }
-            } else if sev_es_status == 0 {
-                TestResult {
-                    name: format!("{}", GuestLevels::SevEs),
-                    stat: TestState::Fail,
-                    mesg: Some("SEV-ES is DISABLED".to_string()),
-                }
-            } else {
-                TestResult {
-                    name: format!("{}", GuestLevels::SevEs),
-                    stat: TestState::Fail,
-                    mesg: format!("Invalid value found in MSR, {}", sev_es_status).into(),
-                }
-            }
-        }
-        GuestLevels::Snp => {
-            let snp_status = temp_bitfield.snp_bit();
-            if snp_status == 1 {
-                TestResult {
-                    name: format!("{}", GuestLevels::Snp),
-                    stat: TestState::Pass,
-                    mesg: Some("SNP is ENABLED".to_string()),
-                }
-            } else if snp_status == 0 {
-                TestResult {
-                    name: format!("{}", GuestLevels::Snp),
-                    stat: TestState::Fail,
-                    mesg: Some("SNP is DISABLED".to_string()),
-                }
-            } else {
-                TestResult {
-                    name: format!("{}", GuestLevels::Snp),
-                    stat: TestState::Fail,
-                    mesg: format!("Invalid value found in MSR, {}", snp_status).into(),
-                }
-            }
-        }
+    if check_bit == 1 {
+        status = TestState::Pass;
+        message = "ENABLED".to_string();
+    } else if optional_field {
+        status = TestState::Pass;
+    }
+
+    TestResult {
+        name: sev_feature.to_string(),
+        stat: status,
+        mesg: Some(message),
     }
 }
