@@ -198,11 +198,11 @@ mod attestation {
         att_report: AttestationReport,
         quiet: bool,
     ) -> Result<()> {
-        let vcek_pubkey = vcek
+        let vek_pubkey = vcek
             .public_key()
-            .context("Failed to get the public key from the VCEK.")?
+            .context("Failed to get the public key from the VEK.")?
             .ec_key()
-            .context("Failed to convert VCEK public key into ECkey.")?;
+            .context("Failed to convert VEK public key into ECkey.")?;
 
         // Get the attestation report signature
         let ar_signature = EcdsaSig::try_from(&att_report.signature)
@@ -218,14 +218,14 @@ mod attestation {
 
         // Verify signature
         if ar_signature
-            .verify(base_message_digest.as_ref(), vcek_pubkey.as_ref())
-            .context("Failed to verify attestation report signature with VCEK public key.")?
+            .verify(base_message_digest.as_ref(), vek_pubkey.as_ref())
+            .context("Failed to verify attestation report signature with VEK public key.")?
         {
             if !quiet {
-                println!("VCEK signed the Attestation Report!");
+                println!("VEK signed the Attestation Report!");
             }
         } else {
-            return Err(anyhow::anyhow!("VCEK did NOT sign the Attestation Report!"));
+            return Err(anyhow::anyhow!("VEK did NOT sign the Attestation Report!"));
         }
 
         Ok(())
@@ -294,16 +294,16 @@ mod attestation {
         att_report: AttestationReport,
         quiet: bool,
     ) -> Result<()> {
-        let vcek_der = vcek.to_der().context("Could not convert VCEK to der.")?;
-        let (_, vcek_x509) = X509Certificate::from_der(&vcek_der)
+        let vek_der = vcek.to_der().context("Could not convert VEK to der.")?;
+        let (_, vek_x509) = X509Certificate::from_der(&vek_der)
             .context("Could not create X509Certificate from der")?;
 
-        // Collect extensions from VCEK
-        let extensions: std::collections::HashMap<Oid, &X509Extension> = vcek_x509
+        // Collect extensions from VEK
+        let extensions: std::collections::HashMap<Oid, &X509Extension> = vek_x509
             .extensions_map()
-            .context("Failed getting VCEK oids.")?;
+            .context("Failed getting VEK oids.")?;
 
-        let common_name: CertType = parse_common_name(vcek_x509.subject())?;
+        let common_name: CertType = parse_common_name(vek_x509.subject())?;
 
         // Compare bootloaders
         if let Some(cert_bl) = extensions.get(&SnpOid::BootLoader.oid()) {
@@ -375,26 +375,31 @@ mod attestation {
     pub fn verify_attestation(args: Args, quiet: bool) -> Result<()> {
         // Get attestation report
         let att_report = if !args.att_report_path.exists() {
-            return Err(anyhow::anyhow!("No attestation report was found. Provide an attestation report to request VCEK from the KDS."));
+            return Err(anyhow::anyhow!("No attestation report was found. Provide an attestation report to request VEK from the KDS."));
         } else {
             report::read_report(args.att_report_path)
                 .context("Could not open attestation report")?
         };
 
-        // Get VCEK and grab its public key
-        let vcek_path = find_cert_in_dir(&args.certs_dir, "vcek")?;
-        let vcek = convert_path_to_cert(&vcek_path, "vcek")?;
+        // Get VEK and its public key.
+        let (vek_path, vek_type) = match find_cert_in_dir(&args.certs_dir, "vlek") {
+            Ok(vlek_path) => (vlek_path, "vlek"),
+            Err(_) => (find_cert_in_dir(&args.certs_dir, "vcek")?, "vcek"),
+        };
+
+        // Get VEK and grab its public key
+        let vek = convert_path_to_cert(&vek_path, vek_type)?;
 
         if args.tcb || args.signature {
             if args.tcb {
-                verify_attestation_tcb(vcek.clone(), att_report, quiet)?;
+                verify_attestation_tcb(vek.clone(), att_report, quiet)?;
             }
             if args.signature {
-                verify_attestation_signature(vcek, att_report, quiet)?;
+                verify_attestation_signature(vek, att_report, quiet)?;
             }
         } else {
-            verify_attestation_tcb(vcek.clone(), att_report, quiet)?;
-            verify_attestation_signature(vcek, att_report, quiet)?;
+            verify_attestation_tcb(vek.clone(), att_report, quiet)?;
+            verify_attestation_signature(vek, att_report, quiet)?;
         }
 
         Ok(())
