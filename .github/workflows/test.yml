@@ -1,0 +1,28 @@
+on: [push, pull_request]
+name: test
+jobs:
+  test:
+    name: ${{ matrix.toolchain }} (${{ matrix.profile.name }})
+    runs-on: ubuntu-latest
+    steps:
+      - run: sudo apt-get install -y asciidoctor
+      - uses: actions/checkout@v2
+      - uses: actions-rs/toolchain@v1
+        with:
+          toolchain: ${{ matrix.toolchain }}
+          override: true
+      - uses: actions-rs/cargo@v1
+        with:
+          command: test
+          args: ${{ matrix.profile.flag }}
+    strategy:
+      fail-fast: false
+      matrix:
+        toolchain:
+          - nightly
+          - beta
+          - stable
+        profile:
+          - name: debug
+          - name: release
+            flag: --release

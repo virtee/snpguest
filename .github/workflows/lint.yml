@@ -1,0 +1,35 @@
+on: [push, pull_request]
+name: lint
+jobs:
+  fmt:
+    name: cargo fmt
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - uses: actions-rs/toolchain@v1
+        with:
+          components: rustfmt
+          toolchain: nightly
+          profile: minimal
+          override: true
+      - uses: actions-rs/cargo@v1
+        with:
+          command: fmt
+          args: --all -- --check
+
+  clippy:
+    name: cargo clippy
+    runs-on: ubuntu-latest
+    steps:
+      - run: sudo apt-get install -y asciidoctor
+      - uses: actions/checkout@v2
+      - uses: actions-rs/toolchain@v1
+        with:
+          components: clippy
+          toolchain: 1.70.0
+          profile: minimal
+          override: true
+      - uses: actions-rs/cargo@v1
+        with:
+          command: clippy
+          args: --all-targets -- -D clippy::all -D unused_imports -Dwarnings
