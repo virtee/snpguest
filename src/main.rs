@@ -5,6 +5,7 @@ mod certs;
 mod display;
 mod fetch;
 mod key;
+mod ok;
 mod report;
 mod verify;
 
@@ -54,6 +55,9 @@ enum SnpGuestCmd {
 
     #[structopt(about = "Key command to generate derived key.")]
     Key(KeyArgs),
+
+    #[structopt(about = "Probe system for SEV-SNP support")]
+    Ok,
 }
 
 fn main() -> Result<()> {
@@ -74,6 +78,7 @@ fn main() -> Result<()> {
         SnpGuestCmd::Verify(subcmd) => verify::cmd(subcmd, snpguest.quiet),
         SnpGuestCmd::Display(subcmd) => display::cmd(subcmd, snpguest.quiet),
         SnpGuestCmd::Key(args) => key::get_derived_key(args),
+        SnpGuestCmd::Ok => ok::cmd(snpguest.quiet),
     };
 
     if let Err(ref e) = status {

@@ -209,6 +209,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "12170080f3533d6f09a19f81596f836854d0fa4867dc32c8172b8474b4e9de61"
 
 [[package]]
+name = "colorful"
+version = "0.2.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "97af0562545a7d7f3d9222fcf909963bec36dcb502afaacab98c6ffac8da47ce"
+
+[[package]]
 name = "core-foundation"
 version = "0.9.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -732,6 +738,12 @@ dependencies = [
  "wasi",
  "windows-sys 0.48.0",
 ]
+
+[[package]]
+name = "msru"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "15a014208ef068fd9eed02eceb063ecba151d9922de4f8b4bb3703ff3d2a3eaa"
 
 [[package]]
 name = "native-tls"
@@ -1385,8 +1397,11 @@ dependencies = [
  "anyhow",
  "asn1-rs",
  "bincode",
+ "bitfield 0.13.2",
+ "colorful",
  "env_logger",
  "hex",
+ "msru",
  "nix",
  "openssl",
  "rand",
