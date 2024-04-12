@@ -94,7 +94,7 @@ fn request_hardware_report(
 
 #[cfg(not(feature = "hyperv"))]
 fn request_hardware_report(data: Option<[u8; 64]>, vmpl: Option<u32>) -> Result<AttestationReport> {
-    let mut fw = Firmware::open().context("unable to open /dev/sev")?;
+    let mut fw = Firmware::open().context("unable to open /dev/sev-guest")?;
     fw.get_report(None, data, vmpl)
         .context("unable to fetch attestation report")
 }
