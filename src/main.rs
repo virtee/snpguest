@@ -20,50 +20,53 @@ use report::ReportArgs;
 use verify::VerifyCmd;
 
 use anyhow::{Context, Result};
-use structopt::StructOpt;
+use clap::{arg, Parser, Subcommand, ValueEnum};
 
-const VERSION: &str = env!("CARGO_PKG_VERSION");
-const AUTHORS: &str = env!("CARGO_PKG_AUTHORS");
-
-#[derive(StructOpt)]
+#[derive(Parser)]
+#[command(author, version, about, long_about = None)]
 struct SnpGuest {
-    #[structopt(subcommand)]
+    #[command(subcommand)]
     pub cmd: SnpGuestCmd,
 
-    #[structopt(short, long, help = "Don't print anything to the console")]
+    /// Don't print anything to the console
+    #[arg(short, long, default_value_t = false)]
     pub quiet: bool,
 }
 
 #[allow(clippy::large_enum_variant)]
-#[derive(StructOpt)]
-#[structopt(author = AUTHORS, version = VERSION, about = "Utilities for managing the SNP Guest environment")]
+/// Utilities for managing the SNP Guest environment
+#[derive(Subcommand)]
 enum SnpGuestCmd {
-    #[structopt(about = "Report command to request an attestation report.")]
+    /// Report command to request an attestation report.
     Report(ReportArgs),
 
-    #[structopt(about = "Certificates command to request cached certificates from the AMD PSP")]
+    /// Certificates command to request cached certificates from the AMD PSP.
     Certificates(CertificatesArgs),
 
-    #[structopt(about = "Fetch command to request certificates.")]
+    /// Fetch command to request certificates.
+    #[command(subcommand)]
     Fetch(FetchCmd),
 
-    #[structopt(about = "Verify command to verify certificates and attestation report.")]
+    /// Verify command to verify certificates and attestation report.
+    #[command(subcommand)]
     Verify(VerifyCmd),
 
-    #[structopt(about = "Display command to display files in human readable form.")]
+    /// Display command to display files in human readable form.
+    #[command(subcommand)]
     Display(DisplayCmd),
 
-    #[structopt(about = "Key command to generate derived key.")]
+    /// Key command to generate derived key.
     Key(KeyArgs),
 
-    #[structopt(about = "Probe system for SEV-SNP support")]
+    /// Probe system for SEV-SNP support.
+    #[command(subcommand)]
     Ok,
 }
 
 fn main() -> Result<()> {
     env_logger::init();
 
-    let snpguest = SnpGuest::from_args();
+    let snpguest = SnpGuest::parse();
 
     #[cfg(feature = "hyperv")]
     let hv = hyperv::present();
