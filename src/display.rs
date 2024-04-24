@@ -4,12 +4,12 @@
 use super::*;
 use std::path::PathBuf;
 
-#[derive(StructOpt)]
+#[derive(Subcommand)]
 pub enum DisplayCmd {
-    #[structopt(about = "Display an attestation report in console.")]
+    /// Display an attestation report in console.
     Report(report_display::Args),
 
-    #[structopt(about = "Display the derived key in console.")]
+    /// Display the derived key in console.
     Key(key_display::Args),
 }
 
@@ -22,9 +22,10 @@ pub fn cmd(cmd: DisplayCmd, quiet: bool) -> Result<()> {
 mod report_display {
     use super::*;
 
-    #[derive(StructOpt)]
+    #[derive(Parser)]
     pub struct Args {
-        #[structopt(help = "Path to attestation report to display.")]
+        /// Path to attestation report to display.
+        #[arg(value_name = "att-report-path", required = true)]
         pub att_report_path: PathBuf,
     }
 
@@ -44,9 +45,10 @@ mod report_display {
 mod key_display {
     use super::*;
 
-    #[derive(StructOpt)]
+    #[derive(Parser)]
     pub struct Args {
-        #[structopt(help = "Path of key to be displayed.")]
+        /// Path of key to be displayed.
+        #[arg(value_name = "key-path", required = true)]
         pub key_path: PathBuf,
     }
 

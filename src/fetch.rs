@@ -13,18 +13,21 @@ use sev::firmware::host::CertType;
 
 use certs::{write_cert, CertFormat};
 
-#[derive(StructOpt)]
+#[derive(Subcommand)]
 pub enum FetchCmd {
-    #[structopt(about = "Fetch the certificate authority (ARK & ASK) from the KDS.")]
+    /// Fetch the certificate authority (ARK & ASK) from the KDS.
     CA(cert_authority::Args),
 
-    #[structopt(about = "Fetch the VCEK from the KDS.")]
+    /// Fetch the VCEK from the KDS.
     Vcek(vcek::Args),
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(ValueEnum, Debug, Clone, PartialEq, Eq)]
 pub enum Endorsement {
+    /// Versioned Chip Endorsement Key
     Vcek,
+
+    /// Versioned Loaded Endorsement Key
     Vlek,
 }
 
@@ -48,11 +51,18 @@ impl FromStr for Endorsement {
         }
     }
 }
-#[derive(Debug, Clone)]
+#[derive(ValueEnum, Debug, Clone)]
 pub enum ProcType {
+    /// 3rd Gen AMD EPYC Processor (Standard)
     Milan,
+
+    /// 4th Gen AMD EPYC Processor (Standard)
     Genoa,
+
+    /// 4th Gen AMD EPYC Processor (Performance)
     Bergamo,
+
+    /// 4th Gen AMD EPYC Processor (Edge)
     Siena,
 }
 
@@ -102,25 +112,22 @@ mod cert_authority {
     use openssl::x509::X509;
     use reqwest::StatusCode;
 
-    #[derive(StructOpt)]
+    #[derive(Parser)]
     pub struct Args {
-        #[structopt(help = "Specify encoding to use for certificates. [PEM | DER]")]
+        /// Specify encoding to use for certificates.
+        #[arg(value_name = "encoding", required = true)]
         pub encoding: CertFormat,
 
-        #[structopt(
-            help = "Specify the processor model for the certificate chain. [Milan | Genoa]"
-        )]
+        /// Specify the processor model for the certificate chain.
+        #[arg(value_name = "processor-model", required = true)]
         pub processor_model: ProcType,
 
-        #[structopt(help = "Directory to store the certificates in.")]
+        /// Directory to store the certificates in.
+        #[arg(value_name = "certs-dir", required = true)]
         pub certs_dir: PathBuf,
 
-        #[structopt(
-            long,
-            short,
-            default_value = "vcek",
-            help = "Specify to pull the VLEK certificate chain instead of VCEK."
-        )]
+        /// Specify which endorsement certificate chain to pull, either VCEK or VLEK.
+        #[arg(short, long, value_name = "endorser", default_value_t = Endorsement::Vcek)]
         pub endorser: Endorsement,
     }
 
@@ -194,20 +201,22 @@ mod vcek {
 
     use super::*;
 
-    #[derive(StructOpt)]
+    #[derive(Parser)]
     pub struct Args {
-        #[structopt(help = "Specify encoding to use for certificates. [PEM | DER]")]
+        /// Specify encoding to use for certificates.
+        #[arg(value_name = "encoding", required = true)]
         pub encoding: CertFormat,
 
-        #[structopt(
-            help = "Specify the processor model for the certificate chain. [Milan | Genoa]"
-        )]
+        /// Specify the processor model for the certificate chain.
+        #[arg(value_name = "processor-model", required = true)]
         pub processor_model: ProcType,
 
-        #[structopt(help = "Directory to store the certificates in.")]
+        /// Directory to store the certificates in.
+        #[arg(value_name = "certs-dir", required = true)]
         pub certs_dir: PathBuf,
 
-        #[structopt(help = "Path to attestation report to use to request VCEK.")]
+        /// Path to attestation report to use to request VCEK.
+        #[arg(value_name = "att-report-path", required = true)]
         pub att_report_path: PathBuf,
     }
 

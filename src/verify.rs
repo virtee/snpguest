@@ -13,12 +13,12 @@ use std::{
 use openssl::{ecdsa::EcdsaSig, sha::Sha384};
 use sev::certs::snp::Chain;
 
-#[derive(StructOpt)]
+#[derive(Subcommand)]
 pub enum VerifyCmd {
-    #[structopt(about = "Verify the certificate chain.")]
+    /// Verify the certificate chain.
     Certs(certificate_chain::Args),
 
-    #[structopt(about = "Verify the attestation report.")]
+    /// Verify the attestation report.
     Attestation(attestation::Args),
 }
 
@@ -45,9 +45,10 @@ mod certificate_chain {
 
     use super::*;
 
-    #[derive(StructOpt)]
+    #[derive(Parser)]
     pub struct Args {
-        #[structopt(help = "Path to directory containing certificate chain")]
+        /// Path to directory containing certificate chain."
+        #[arg(value_name = "certs-dir", required = true)]
         pub certs_dir: PathBuf,
     }
 
@@ -174,22 +175,22 @@ mod attestation {
         }
     }
 
-    #[derive(StructOpt)]
+    #[derive(Parser)]
     pub struct Args {
-        #[structopt(help = "Path to directory containing VCEK.")]
+        /// Path to directory containing VCEK.
+        #[arg(value_name = "certs-dir", required = true)]
         pub certs_dir: PathBuf,
 
-        #[structopt(help = "Path to attestation report to use for validation.")]
+        /// Path to attestation report to use for validation.
+        #[arg(value_name = "att-report-path", required = true)]
         pub att_report_path: PathBuf,
 
-        #[structopt(long = "tcb", short, help = "Run the tcb verification only.")]
+        /// Run the TCB Verification Exclusively.
+        #[arg(short, long, conflicts_with = "signature")]
         pub tcb: bool,
 
-        #[structopt(
-            long = "signature",
-            short,
-            help = "Run the signature verification only."
-        )]
+        /// Run the Signature Verification Exclusively.
+        #[arg(short, long, conflicts_with = "tcb")]
         pub signature: bool,
     }
 

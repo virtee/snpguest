@@ -22,12 +22,13 @@ pub struct CertPaths {
     pub ask_path: PathBuf,
     pub vek_path: PathBuf,
 }
-#[derive(StructOpt, Clone, Copy)]
+
+#[derive(ValueEnum, Clone, Copy)]
 pub enum CertFormat {
-    #[structopt(about = "Certificates are encoded in PEM format.")]
+    /// Certificates are encoded in PEM format.
     Pem,
 
-    #[structopt(about = "Certificates are encoded in DER format.")]
+    /// Certificates are encoded in DER format.
     Der,
 }
 
@@ -164,14 +165,14 @@ pub fn write_cert(
     Ok(())
 }
 
-#[derive(StructOpt)]
+#[derive(Parser)]
 pub struct CertificatesArgs {
-    #[structopt(help = "Specify encoding to use for certificates. [PEM | DER]")]
+    /// Specify encoding to use for certificates.
+    #[arg(value_name = "encoding", required = true)]
     pub encoding: CertFormat,
 
-    #[structopt(
-        help = "Directory to store certificates in. Required if requesting an extended-report."
-    )]
+    /// Directory to store certificates in. Required if requesting an extended-report.
+    #[arg(value_name = "certs-dir", required = true)]
     pub certs_dir: PathBuf,
 }
 

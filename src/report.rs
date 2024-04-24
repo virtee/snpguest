@@ -30,35 +30,31 @@ pub fn create_random_request() -> [u8; 64] {
     data
 }
 
-#[derive(StructOpt)]
+/// Report command to request an attestation report.
+#[derive(Parser)]
 pub struct ReportArgs {
-    #[structopt(help = "File to write the attestation report to.")]
+    /// File to write the attestation report to.
+    #[arg(value_name = "att-report-path", required = true)]
     pub att_report_path: PathBuf,
 
-    #[structopt(
-        long = "random",
-        short,
-        help = "Use random data for attestation report request. Writes data to ./random-request-file.txt by default, use --request to specify where to write data."
-    )]
+    /// Use random data for attestation report request. Writes data
+    /// to ./random-request-file.txt by default, use --request to specify
+    /// where to write data.
+    #[arg(short, long, default_value_t = false, conflicts_with = "platform")]
     pub random: bool,
 
-    #[structopt(
-        long = "vmpl",
-        short,
-        help = "Specify VMPL level the Guest is running on. Defaults to 1."
-    )]
+    /// Specify an integer VMPL level between 0 and 3 that the Guest is running on.
+    #[arg(short, long, default_value = "1", value_name = "vmpl")]
     pub vmpl: Option<u32>,
 
-    #[structopt(
-        help = "Provide file with data for attestation-report request. If provided with random flag, then the random data will be written in the provided path."
-    )]
+    /// Provide file with data for attestation-report request. If provided
+    /// with random flag, then the random data will be written in the
+    /// provided path.
+    #[arg(value_name = "request-file", required = true)]
     pub request_file: PathBuf,
 
-    #[structopt(
-        long,
-        short,
-        help = "Expect that the 64-byte report data will already be provided by the platform provider."
-    )]
+    /// Expect that the 64-byte report data will already be provided by the platform provider.
+    #[arg(short, long, conflicts_with = "random")]
     pub platform: bool,
 }
 

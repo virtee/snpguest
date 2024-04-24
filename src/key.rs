@@ -6,43 +6,31 @@ use sev::firmware::guest::{DerivedKey, Firmware, GuestFieldSelect};
 use std::io::Read;
 use std::{fs, path::PathBuf};
 
-#[derive(StructOpt)]
+#[derive(Parser)]
 pub struct KeyArgs {
-    #[structopt(help = "This is the path where the derived key will be saved")]
+    /// This is the path where the derived key will be saved.
+    #[arg(value_name = "key-path", required = true)]
     pub key_path: PathBuf,
 
-    #[structopt(
-        help = "This is the root key from which to derive the key. Input either VCEK or VMRK."
-    )]
+    /// This is the root key from which to derive the key. Input either VCEK or VMRK.
+    #[arg(value_name = "root-key-select", required = true)]
     pub root_key_select: String,
 
-    #[structopt(
-        long = "vmpl",
-        short,
-        help = "Specify VMPL level the Guest is running on. Defaults to 1."
-    )]
+    /// Specify an integer VMPL level between 0 and 3 that the Guest is running on.
+    #[arg(short, long, value_name = "vmpl", default_value = "1")]
     pub vmpl: Option<u32>,
 
-    #[structopt(
-        long = "guest_field_select",
-        short = "g",
-        help = "Specify which Guest Field Select bits to enable. It is a 6 digit binary string. For each bit, 0 denotes off and 1 denotes on.
-        The least significant (rightmost) bit is Guest Policy followed by Image ID, Family ID, Measurement, SVN, TCB Version which is the most significant (leftmost) bit. "
-    )]
+    /// Specify which Guest Field Select bits to enable. It is a 6 digit binary string. For each bit, 0 denotes off and 1 denotes on.
+    /// The least significant (rightmost) bit is Guest Policy followed by Image ID, Family ID, Measurement, SVN, TCB Version which is the most significant (leftmost) bit.
+    #[arg(short, long = "guest_file_select", value_name = "######")]
     pub gfs: Option<String>,
 
-    #[structopt(
-        long = "guest_svn",
-        short = "s",
-        help = "Specify the guest SVN to mix into the key. Must not exceed the guest SVN provided at launch in the ID block."
-    )]
+    /// Specify the guest SVN to mix into the key. Must not exceed the guest SVN provided at launch in the ID block.
+    #[arg(short = 's', long = "guest_svn")]
     pub gsvn: Option<u32>,
 
-    #[structopt(
-        long = "tcb_version",
-        short,
-        help = "Specify the TCB version to mix into the derived key. Must not exceed CommittedTcb"
-    )]
+    /// Specify the TCB version to mix into the derived key. Must not exceed CommittedTcb.
+    #[arg(short, long = "tcb_version")]
     pub tcbv: Option<u64>,
 }
 
