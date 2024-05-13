@@ -59,7 +59,6 @@ enum SnpGuestCmd {
     Key(KeyArgs),
 
     /// Probe system for SEV-SNP support.
-    #[command(subcommand)]
     Ok,
 }
 
