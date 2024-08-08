@@ -189,7 +189,7 @@ COMMANDS
         [-i, --id-file] [-a, --auth-file]
     
     Calculates an id-block and auth-block for a secure guest.
-    User nees to provide a path to two different EC p384 keys in pem or der format. One will be for the id-block the other for the auth-block.
+    User needs to provide a path to two different EC p384 keys in pem or der format. One will be for the id-block the other for the auth-block.
     The user will also need to provide the launch digest (in either hex or base64 format) of the secure guest.
     The user can generate the launch digest using the "generate measurement" command.
     The user can provide optional id's for further verification using the [-f, --family-id] and [-m, image-id] paramerters.
