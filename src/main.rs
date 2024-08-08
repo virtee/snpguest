@@ -6,6 +6,7 @@ mod display;
 mod fetch;
 mod key;
 mod ok;
+mod preattestation;
 mod report;
 mod verify;
 
@@ -16,6 +17,7 @@ use certs::CertificatesArgs;
 use display::DisplayCmd;
 use fetch::FetchCmd;
 use key::KeyArgs;
+use preattestation::PreAttestationCmd;
 use report::ReportArgs;
 use verify::VerifyCmd;
 
@@ -60,6 +62,10 @@ enum SnpGuestCmd {
 
     /// Probe system for SEV-SNP support.
     Ok,
+
+    /// Generate Pre-Attestation components
+    #[command(subcommand)]
+    Generate(PreAttestationCmd),
 }
 
 fn main() -> Result<()> {
@@ -81,6 +87,7 @@ fn main() -> Result<()> {
         SnpGuestCmd::Display(subcmd) => display::cmd(subcmd, snpguest.quiet),
         SnpGuestCmd::Key(args) => key::get_derived_key(args),
         SnpGuestCmd::Ok => ok::cmd(snpguest.quiet),
+        SnpGuestCmd::Generate(subcmd) => preattestation::cmd(subcmd, snpguest.quiet),
     };
 
     if let Err(ref e) = status {

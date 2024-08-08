@@ -131,8 +131,98 @@ COMMANDS
     -s, --guest_svn                Specify the guest SVN to mix into the key.
     -t, --tcb_version               Specify the TCB version to mix into the derived key. 
     -v, --vmpl                      Specify VMPL level the Guest is running on. Defaults to 1.
- 
 
+*snpguest generate measurement*::
+    usage: snpguest generate measurement [-v, --vcpus] [--vcpu-type] [--vcpu-sig] [--vcpu-family] [--vcpu-model] [--vcpu-stepping] [-t, --vmm-type] [-o ,--ovmf] [-k, --kernel]
+            [-i, --initrd] [-a, --append] [-g, --guest-features] [--ovmf-hash] [-f, --output-format] [-m, --measurement-file]
+    
+    Calculates a secure guest expected launch digest measurement.
+    Every parameter passed in is used to calculate this measurement, but the user does not need to provide every parameter.
+    The only mandatory parameters are the [-o, --ovmf] parameter which is a path to the ovmf file used to launch the secure guest, and provide the guest vcpu type.
+    There are 3 ways to provide the vcpu type, and the 3 of them are mutually exclusive (will get an error if the user tries to use more than one method):
+        - [--vcpu-type] A string with the vcpu-type used to launch the secure guest
+        - [--vcpu-sig] The signature of the vcpu-type used to launch the secure guest
+        - [--vcpu-family] [--vcpu-model] [--vcpu-stepping] The family, model and stepping of the vcpu used to launch the secure guest.
+            Family, model and stepping have to be used together, if they're not all provided together an error will be raised.
+    If the user provides the [-k, --kernel] parameter to calculate the measurement, they also need to provide [-i, --initrd] and [-a, --append].
+    There were kernel features added that affect the result of the measurement if those are enabled. With the [-g, --guest-features] parameter the user can provide which of this features are enabled in their kernel.
+    The [-g, --guest-features] can be a hex or decimal number that cover the features enabled. 
+    For information on the guest-features bitfield checkout: https://github.com/virtee/sev/blob/a3c91d7b6e742c1b5685a7e0c1e5464819527b06/src/measurement/vmsa.rs#L139
+    A user can use a pre-calculated ovmf-hash using [--ovmf-hash], but the ovmf file still has to be provided.
+    The calculated measurement will be printed in the console, if the user wishes to store the measurement value they can provide a file path with [-m, --measurement-file] and the measurement will get written there.
+    If the [--quiet] flag is used, nothing will be printed out.
+
+    options:
+    -h, --help  Show a help message
+    -v, --vcpus  Number of guest vcpus [default: 1]
+    --vcpu-type  Type of guest vcpu (EPYC, EPYC-v1, EPYC-v2, EPYC-IBPB, EPYC-v3, EPYC-v4, EPYC-Rome, EPYC-Rome-v1, EPYC-Rome-v2, EPYC-Rome-v3, EPYC-Milan, EPYC- Milan-v1, EPYC-Milan-v2, EPYC-Genoa, EPYC-Genoa-v1)
+    --vcpu-sig  Guest vcpu signature value
+    --vcpu-family  Guest vcpu family
+    --vcpu-model  Guest vcpu model
+    --vcpu-stepping  Guest vcpu stepping
+    -t, --vmm-type  Type of guest vmm (QEMU, ec2, KRUN) [default: QEMU]
+    -o, --ovmf  OVMF file to calculate measurement from
+    -k, --kernel  Kernel file to calculate measurement from
+    -i, --initrd  Initrd file to calculate measurement from
+    -a, --append  Kernel command line in string format to calculate measurement from
+    -g, --guest-features  Hex representation of the guest kernel features expected to be included [default: 0x1]
+    --ovmf-hash  Precalculated hash of the OVMF binary
+    -f, --output-format  Output format (base64, hex). [default: hex]
+    -m, --measurement-file Optional file path where the measurement value can be stored in
+ 
+*snpguest generate ovmf-hash*::
+    usage: snpguest generate ovmf-hash [-o, --ovmf] [-f, --output--format] [--hash-file]
+    
+    Calculates the hash of an ovmf file.
+    User only needs to provide the file they want the hash for.
+    The hash will be printed in the console, if the user wishes to store the hash value they can provide a file path with [--hash-file] and the hash will get written there.
+    If the [--quiet] flag is used, nothing will be printed out.
+
+    options:
+    -h, --help  Show a help message
+    -o, --ovmf  OVMF file to generate hash for
+    -f, --output-format  Output format (base64, hex). [default: hex]
+    --hash-file Optional file path where the hash value can be stored in
+
+*snpguest generate id-block*::
+    usage: snpguest generate id-block $ID-BLOCK-KEY $AUTH-KEY $LAUNCH-DIGEST [-f, --family-id] [-m, --image-id] [-v, --version] [-s, --svn] [-p, --policy] 
+        [-i, --id-file] [-a, --auth-file]
+    
+    Calculates an id-block and auth-block for a secure guest.
+    User needs to provide a path to two different EC p384 keys in pem or der format. One will be for the id-block the other for the auth-block.
+    The user will also need to provide the launch digest (in either hex or base64 format) of the secure guest.
+    The user can generate the launch digest using the "generate measurement" command.
+    The user can provide optional id's for further verification using the [-f, --family-id] and [-m, image-id] paramerters.
+    The user can provide the security version number of the guest using [-s, --svn].
+    The user can specify the launch policy of the guest using the [-p, --policy] parameter..
+    The policy can be provided in either hex or decimal format.  It will default to 0x30000. 
+    For more information on the guest-policy, you can refer to: https://www.amd.com/content/dam/amd/en/documents/epyc-technical-docs/specifications/56860.pdf#page=27
+    The blocks will be printed in the console, if the user wishes to store the blocks values they can provide a file path with [-i, --id-file] for the id-block
+    and [-a, --auth-file] for the auth-block.
+    If the [--quiet] flag is used, nothing wibe printed out.
+
+    options:
+    -h, --help  Show a help message
+    -f, --family-id  Family ID of the guest provided by the guest owner. Has to be 16 characters
+    -m, --image-id  Image ID of the guest provided by the guest owner. Has to be 16 characters
+    -v, --version  Id-Block version. Currently only version 1 is available
+    -s, --svn  SVN (SECURITY VERSION NUMBER) of the guest
+    -p, --policy  Launch policy of the guest. Can provide in decimal or hex format
+    -i, --id-file Optional file where the Id-Block value can be stored in
+    -a, --auth-file Optional file where the Auth-Block value can be stored in
+
+*snpguest generate key-digest*::
+    usage: snpguest generate key-digest $KEY-PATH [-d, --key-digest-file]
+    
+    Generates an SEV key digest for a provided EC p384 key.
+    User needs to provide a path to the key 
+    The key has to be a EC p384 key in either pem or der format.
+    The digest will be printed in the console, if the user wishes to store the digest value they can provide a file path with [-d, --key-digest-file]
+    If the [--quiet] flag is used, nothing wibe printed out.
+
+    options:
+    -h, --help  Show a help message
+    -d, --key-digest-file  File to store the key digest in
 
 *snpguest guest display report*::
     usage: snpguest display report $ATT_REPORT_PATH
