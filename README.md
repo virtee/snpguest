@@ -18,6 +18,7 @@
 - [Building](#building)
   - [Ubuntu Dependencies](#ubuntu-dependencies)
   - [RHEL and its compatible distributions dependencies](#rhel-and-its-compatible-distributions-dependencies)
+  - [openSUSE and its compatible distributions dependencies](#opensuse-and-its-compatible-distributions-dependencies)
 - [Reporting Bugs](#reporting-bugs)
 
 ## Usage
@@ -372,6 +373,11 @@ sudo apt install build-essential
 sudo dnf groupinstall "Development Tools" "Development Libraries"
 ```
 
+### openSUSE and its compatible distributions Dependencies
+
+```bash
+sudo zypper in -t pattern "devel_basis"
+```
 
 ## Reporting Bugs
 
