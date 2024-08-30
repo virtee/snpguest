@@ -19,7 +19,7 @@ default = []
 hyperv = ["tss-esapi"]
 
 [dependencies]
-clap = { version = "<4.5", features = [ "derive" ] }
+clap = { version = "4.5", features = [ "derive" ] }
 env_logger = "0.10.0"
 anyhow = "1.0.69"
 sev = { version = "4.0", default-features = false, features = ['openssl','snp']}
