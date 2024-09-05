@@ -10,7 +10,7 @@ description = "Navigation utility for AMD SEV-SNP guest environment"
 readme = "README.md"
 keywords = ["amd", "sev", "sev-snp", "snp"]
 exclude = [ ".gitignore", ".github/*" ]
-rust-version = "1.74"
+rust-version = "1.80"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
