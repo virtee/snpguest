@@ -109,7 +109,7 @@ snpguest fetch <SUBCOMMAND>
 Subcommands
 1. `ca`
 
-    Requests the certificate authority chain (ARK & ASK) from the KDS. The user needs to specify the certificate encoding to store the certificates in (PEM or DER). Currently, only PEM and DER encodings are supported. Both certificates will be in the same encoding. The user must specify their host processor model. The user also needs to provide the path to the directory where the certificates will be stored. If the certificates already exist in the provided directory, they will be overwritten. Besides, the option `--endorser` specifies the type of the attestation signing key.
+    Requests the certificate authority chain (ARK & ASK) from the KDS. The user needs to specify the certificate encoding to store the certificates in (PEM or DER). Currently, only PEM and DER encodings are supported. Both certificates will be in the same encoding. The user must specify their host processor model. The user also needs to provide the path to the directory where the certificates will be stored. If the certificates already exist in the provided directory, they will be overwritten. The `--endorser` argument specifies the type of attestation signing key (defaults to VCEK).
 
     Usage
     ```bash
@@ -316,7 +316,7 @@ snpguest verify attestation $CERTS_DIR $ATT_REPORT_PATH [-t, --tcb] [-s, --signa
 snpguest report $ATT_REPORT_PATH $REQUEST_FILE [-v, --vmpl] [-r, --random] [-p, --platform]
 ```
 
-**Step 2.** Request AMD Root Key (ARK) and AMD SEV Key (ASK) from the AMD Key Distribution Service (KDS) by providing the three mandatory parameters - $ENCODING which specifies whether to use PEM or DER encoding to store the certificates, $PROCESSOR_MODEL - which specifies the AMD Processor model for which the certificates are to be fetched and $CERTS_DIR which specifies the path in the user's directory where the certificates will be saved. Besides, the option `-e, --endorser` specifies the type of the attestation signing key.
+**Step 2.** Request AMD Root Key (ARK) and AMD SEV Key (ASK) from the AMD Key Distribution Service (KDS) by providing the three mandatory parameters - $ENCODING which specifies whether to use PEM or DER encoding to store the certificates, $PROCESSOR_MODEL - which specifies the AMD Processor model for which the certificates are to be fetched and $CERTS_DIR which specifies the path in the user's directory where the certificates will be saved. The `-e, --endorser` argument specifies the type of attestation signing key (defaults to VCEK).
 
 ```bash
 snpguest fetch ca $ENCODING $PROCESSOR_MODEL $CERTS_DIR [-e, --endorser] $ENDORSER
