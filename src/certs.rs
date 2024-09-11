@@ -168,7 +168,7 @@ pub fn write_cert(
 #[derive(Parser)]
 pub struct CertificatesArgs {
     /// Specify encoding to use for certificates.
-    #[arg(value_name = "encoding", required = true)]
+    #[arg(value_name = "encoding", required = true, ignore_case = true)]
     pub encoding: CertFormat,
 
     /// Directory to store certificates in. Required if requesting an extended-report.

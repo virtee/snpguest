@@ -57,7 +57,8 @@ mod measurement {
         /// Milan-v1, EPYC-Milan-v2, EPYC-Genoa, EPYC-Genoa-v1)
         #[arg(long, value_name = "vcpu-type", 
             conflicts_with_all = ["vcpu_sig", "vcpu_family", "vcpu_model", "vcpu_stepping"], 
-            required_unless_present_all(["vcpu_sig", "vcpu_family", "vcpu_model", "vcpu_stepping"]))]
+            required_unless_present_all(["vcpu_sig", "vcpu_family", "vcpu_model", "vcpu_stepping"],
+        ), ignore_case = true)]
         pub vcpu_type: Option<String>,
 
         /// Guest vcpu signature value
@@ -77,7 +78,7 @@ mod measurement {
         pub vcpu_stepping: Option<i32>,
 
         /// Type of guest vmm (QEMU, ec2, KRUN)
-        #[arg(long, short = 't', value_name = "vmm-type")]
+        #[arg(long, short = 't', value_name = "vmm-type", ignore_case = true)]
         pub vmm_type: Option<String>,
 
         /// OVMF file to calculate measurement from
@@ -110,7 +111,13 @@ mod measurement {
         pub ovmf_hash: Option<String>,
 
         ///Choose output format (base64, hex).
-        #[arg(long, short = 'f', value_name = "output-format", default_value = "hex")]
+        #[arg(
+            long,
+            short = 'f',
+            value_name = "output-format",
+            default_value = "hex",
+            ignore_case = true
+        )]
         pub output_format: String,
 
         /// Optional file path where measurement value can be stored in
