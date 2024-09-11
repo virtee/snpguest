@@ -210,7 +210,13 @@ mod ovmf_hash {
         pub ovmf: PathBuf,
 
         /// Choose output format (base64, hex). Defaults to hex
-        #[arg(short = 'f', long, value_name = "output-format", default_value = "hex")]
+        #[arg(
+            short = 'f',
+            long,
+            value_name = "output-format",
+            default_value = "hex",
+            ignore_case = true
+        )]
         pub output_format: String,
 
         /// Optional file where hash value can be stored in
@@ -268,7 +274,7 @@ mod idblock {
         pub launch_digest: String,
 
         /// Family ID of the guest provided by the guest owner. Has to be 16 characters.
-        #[arg(short, long, value_name = "familiy-id")]
+        #[arg(short, long, value_name = "family-id")]
         pub family_id: Option<String>,
 
         /// Image ID of the guest provided by the guest owner. Has to be 16 characters.
