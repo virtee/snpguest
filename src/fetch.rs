@@ -115,11 +115,11 @@ mod cert_authority {
     #[derive(Parser)]
     pub struct Args {
         /// Specify encoding to use for certificates.
-        #[arg(value_name = "encoding", required = true)]
+        #[arg(value_name = "encoding", required = true, ignore_case = true)]
         pub encoding: CertFormat,
 
         /// Specify the processor model for the certificate chain.
-        #[arg(value_name = "processor-model", required = true)]
+        #[arg(value_name = "processor-model", required = true, ignore_case = true)]
         pub processor_model: ProcType,
 
         /// Directory to store the certificates in.
@@ -127,7 +127,7 @@ mod cert_authority {
         pub certs_dir: PathBuf,
 
         /// Specify which endorsement certificate chain to pull, either VCEK or VLEK.
-        #[arg(short, long, value_name = "endorser", default_value_t = Endorsement::Vcek)]
+        #[arg(short, long, value_name = "endorser", default_value_t = Endorsement::Vcek, ignore_case = true)]
         pub endorser: Endorsement,
     }
 
@@ -204,11 +204,11 @@ mod vcek {
     #[derive(Parser)]
     pub struct Args {
         /// Specify encoding to use for certificates.
-        #[arg(value_name = "encoding", required = true)]
+        #[arg(value_name = "encoding", required = true, ignore_case = true)]
         pub encoding: CertFormat,
 
         /// Specify the processor model for the certificate chain.
-        #[arg(value_name = "processor-model", required = true)]
+        #[arg(value_name = "processor-model", required = true, ignore_case = true)]
         pub processor_model: ProcType,
 
         /// Directory to store the certificates in.

@@ -13,7 +13,7 @@ pub struct KeyArgs {
     pub key_path: PathBuf,
 
     /// This is the root key from which to derive the key. Input either VCEK or VMRK.
-    #[arg(value_name = "root-key-select", required = true)]
+    #[arg(value_name = "root-key-select", required = true, ignore_case = true)]
     pub root_key_select: String,
 
     /// Specify an integer VMPL level between 0 and 3 that the Guest is running on.
