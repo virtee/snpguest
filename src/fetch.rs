@@ -64,6 +64,9 @@ pub enum ProcType {
 
     /// 4th Gen AMD EPYC Processor (Edge)
     Siena,
+
+    /// 5th Gen AMD EPYC Processor (Standard)
+    Turin,
 }
 
 impl ProcType {
@@ -84,6 +87,7 @@ impl FromStr for ProcType {
             "genoa" => Ok(ProcType::Genoa),
             "bergamo" => Ok(ProcType::Bergamo),
             "siena" => Ok(ProcType::Siena),
+            "turin" => Ok(ProcType::Turin),
             _ => Err(anyhow::anyhow!("Processor type not found!")),
         }
     }
@@ -96,6 +100,7 @@ impl fmt::Display for ProcType {
             ProcType::Genoa => write!(f, "Genoa"),
             ProcType::Bergamo => write!(f, "Bergamo"),
             ProcType::Siena => write!(f, "Siena"),
+            ProcType::Turin => write!(f, "Turin"),
         }
     }
 }
@@ -236,8 +241,13 @@ mod vcek {
             report::read_report(att_report_path).context("Could not open attestation report")?
         };
 
-        // Use attestation report to get data for URL
-        let hw_id: String = hex::encode(att_report.chip_id);
+        let hw_id: String = match processor_model {
+            ProcType::Turin => {
+                let shorter_bytes: &[u8] = &att_report.chip_id[0..8];
+                hex::encode(shorter_bytes)
+            }
+            _ => hex::encode(att_report.chip_id),
+        };
 
         let vcek_url: String = format!(
             "{KDS_CERT_SITE}{KDS_VCEK}/{}/\

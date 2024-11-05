@@ -277,7 +277,7 @@ mod attestation {
         {
             match val.to_lowercase() {
                 x if x.contains("ark") => Ok(CertType::ARK),
-                x if x.contains("ask") => Ok(CertType::ASK),
+                x if x.contains("ask") | x.contains("sev") => Ok(CertType::ASK),
                 x if x.contains("vcek") => Ok(CertType::VCEK),
                 x if x.contains("vlek") => Ok(CertType::VLEK),
                 x if x.contains("crl") => Ok(CertType::CRL),
