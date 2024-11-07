@@ -1,0 +1,124 @@
+name: snpguest CI PR test
+
+on:
+  pull_request_target:
+    types:
+      - reopened
+      - opened
+      - edited
+      - synchronize
+  workflow_dispatch:
+
+jobs:
+  check_snp_host:
+    runs-on: self-hosted
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v2
+
+      - name: Verify if SNP is enabled on the host
+        run: |
+              verify_snp_host() {
+              if ! sudo dmesg | grep -i "SEV-SNP enabled" 2>&1 >/dev/null; then
+                echo -e "SEV-SNP not enabled on the host. Please follow these steps to enable:\n\
+                $(echo "${AMDSEV_URL}" | sed 's|\.git$||g')/tree/${AMDSEV_DEFAULT_BRANCH}#prepare-host"
+                return 1
+              fi
+              }
+              verify_snp_host
+
+  snp_guest_tests:
+    runs-on: self-hosted
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v2
+
+      - name: Launch SNP enabled guest
+        run: |
+          rm -rf ~/snp.sh
+          wget https://raw.githubusercontent.com/LakshmiSaiHarika/sev-utils/Fedora-Latest-SNP-kernel-Upstream/tools/snp.sh
+          chmod +x snp.sh
+
+          # rm -rf ~/snp/launch
+          ./snp.sh launch-guest
+
+      - name: Verify SNP on the guest via MSR
+        run: |
+          ssh_guest_command() {
+              GUEST_SSH_KEY_PATH="${HOME}/snp/launch/snp-guest-key"
+              if [ ! -f "${GUEST_SSH_KEY_PATH}" ]; then
+                echo "SSH key not present, cannot verify guest SNP enabled."
+                exit 1
+              fi
+              command="$1"
+              ssh -p 10022 -i "${GUEST_SSH_KEY_PATH}" -o "StrictHostKeyChecking no" -o "PasswordAuthentication=no" -o ConnectTimeout=1 amd@localhost "${command}"
+            }
+
+          verify_snp_guest_msr(){
+            # Install guest rdmsr package dependencies to insert guest msr module
+            ssh_guest_command "sudo dnf install -y msr-tools > /dev/null 2>&1" > /dev/null 2>&1
+            ssh_guest_command "sudo modprobe msr" > /dev/null 2>&1
+            local guest_msr_read=$(ssh_guest_command "sudo rdmsr -p 0 0xc0010131")
+            guest_msr_read=$(echo "${guest_msr_read}" | tr -d '\r' | bc)
+
+            # Map all the sev features in a single associative array for all guest SEV features
+            declare -A actual_sev_snp_bit_status=(
+              [SEV]=$(( ( ${guest_msr_read} >> 0) & 1))
+              [SEV-ES]=$(( (${guest_msr_read} >> 1) & 1))
+              [SNP]=$(( (${guest_msr_read} >> 2) & 1))
+            )
+
+            local sev_snp_error=""
+            for sev_snp_key in "${!actual_sev_snp_bit_status[@]}";
+            do
+                if [[ ${actual_sev_snp_bit_status[$sev_snp_key]} != 1 ]]; then
+                  # Capture the guest SEV/SNP bit value mismatch
+                  sev_snp_error+=$(echo "${sev_snp_key} feature is not active on the guest.\n");
+                fi
+            done
+
+            if [[ ! -z "${sev_snp_error}" ]]; then
+              >&2 echo -e "ERROR: ${sev_snp_error}"
+              return 1
+            fi
+           }
+
+          verify_snp_guest_msr
+
+      - name: snpguest tool PR test on the guest
+        run: |
+          ssh_guest_command() {
+              # SSH guest commands
+              GUEST_SSH_KEY_PATH="${HOME}/snp/launch/snp-guest-key"
+              if [ ! -f "${GUEST_SSH_KEY_PATH}" ]; then
+                echo "SSH key not present, cannot verify guest SNP enabled."
+                exit 1
+              fi
+              command="$1"
+              ssh -p 10022 -i "${GUEST_SSH_KEY_PATH}" -o "StrictHostKeyChecking no" -o "PasswordAuthentication=no" -o ConnectTimeout=1 amd@localhost "${command}"
+          }
+
+          # Install snpguest dependencies as a root user
+           ssh_guest_command "sudo su - <<EOF
+           curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs -sSf | sh -s -- -y
+           source "${HOME}/.cargo/env" 2>/dev/null
+           sudo dnf install -y git gcc
+           sudo dnf groupinstall -y 'Development Tools'
+           sudo dnf groupinstall -y 'Development Libraries'
+           sudo dnf install -y pkgconf perl-FindBin perl-IPC-Cmd openssl-devel
+          EOF"
+
+          # Clean up and perform PR test on snpguest tool as root user
+          ssh_guest_command "sudo su - <<EOF
+          rm -rf ~/snpguest
+          git clone https://github.com/virtee/snpguest
+          cd ~/snpguest
+
+          # Checkout PR branch
+          if [ ${{ github.event_name }} == "pull_request_target" ]; then
+            git fetch origin pull/${{ github.event.pull_request.number }}/head:${{ github.head_ref }}
+            git switch ${{ github.head_ref }}
+          fi
+
+          cargo test
+          EOF"
