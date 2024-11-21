@@ -159,4 +159,5 @@ jobs:
 
            rm -rf ${HOME}/snp/launch/${{ env.guest_name }}
            ssh-keygen -R [localhost]:${{ env.guest_port_in_use }}
+run-name: Snpguest cargo test for PR#${{ env.pr_number }} on PR branch ${{ env.pr_branch }} 
 
