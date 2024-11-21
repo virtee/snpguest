@@ -160,5 +160,5 @@ jobs:
            rm -rf ${HOME}/snp/launch/${{ env.guest_name }}
            ssh-keygen -R [localhost]:${{ env.guest_port_in_use }}
 run-name: |
-  ${{ (startsWith(github.event_name, 'workflow_dispatch') && github.event.inputs.pull_request_number) ||
-      (startsWith(github.event_name, 'pull_request') && github.event.pull_request.title ) }}
+  ${{ (startsWith(github.event_name, 'workflow_dispatch') && 'Manual Event: ' + github.event.inputs.pull_request_number) ||
+      (startsWith(github.event_name, 'pull_request') && 'Pull Request: ' + github.event.pull_request.title ) }}
