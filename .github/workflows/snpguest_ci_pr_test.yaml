@@ -160,9 +160,8 @@ jobs:
            rm -rf ${HOME}/snp/launch/${{ env.guest_name }}
            ssh-keygen -R [localhost]:${{ env.guest_port_in_use }}
 run-name: |
-  ${{ if github.event_name == 'workflow_dispatch' }}
-    Manually triggered Event: Test on PR#${{ github.event.pull_request.number }}
+  ${{ if github.event_name == 'push' }}
+    Push Event: ${{ github.ref }}
   ${{ elseif github.event_name == 'pull_request' }}
     Pull Request: ${{ github.event.pull_request.title }}
   ${{ endif }}
-
