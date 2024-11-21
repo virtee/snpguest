@@ -160,5 +160,5 @@ jobs:
            rm -rf ${HOME}/snp/launch/${{ env.guest_name }}
            ssh-keygen -R [localhost]:${{ env.guest_port_in_use }}
 run-name: |
-  ${{ (startsWith(github.event_name, 'workflow_dispatch') && format('snpguest PR CI test for PR#{0} with PR source branch {1}', github.event.inputs.pull_request_number, github.event.inputs.pull_request_branch)) ||
+  ${{ (startsWith(github.event_name, 'workflow_dispatch') && format('snpguest PR CI test for PR#{0}/PR source branch({1})', github.event.inputs.pull_request_number, github.event.inputs.pull_request_branch)) ||
          (startsWith(github.event_name, 'pull_request') && format('{0}', github.event.pull_request.title )) }}
