@@ -112,7 +112,7 @@ jobs:
           # Install snpguest dependencies as a root user
            ssh_guest_command "sudo su - <<EOF
            curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs -sSf | sh -s -- -y
-           source "/home/${{ env.guest_name }}/.cargo/env" 2>/dev/null
+           source "/home/root/.cargo/env" 2>/dev/null
            sudo dnf install -y git gcc
            sudo dnf groupinstall -y 'Development Tools'
            sudo dnf groupinstall -y 'Development Libraries'
@@ -121,7 +121,7 @@ jobs:
 
           # Perform PR test on snpguest tool as root user
           ssh_guest_command "sudo su - <<EOF
-          cd /home/${{ env.guest_name }}/
+          cd /home/root/
           git clone https://github.com/LakshmiSaiHarika/snpguest.git
           cd ./snpguest
 
