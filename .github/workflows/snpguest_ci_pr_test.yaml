@@ -159,5 +159,10 @@ jobs:
 
            rm -rf ${HOME}/snp/launch/${{ env.guest_name }}
            ssh-keygen -R [localhost]:${{ env.guest_port_in_use }}
-run-name: Snpguest cargo test for PR#${{ env.pr_number }} on PR branch ${{ env.pr_branch }} 
+run-name: |
+  ${{ if github.event_name == 'workflow_dispatch' }}
+    Manually triggered Event: Test on PR#${{ github.event.pull_request.number }}
+  ${{ elseif github.event_name == 'pull_request' }}
+    Pull Request: ${{ github.event.pull_request.title }}
+  ${{ endif }}
 
