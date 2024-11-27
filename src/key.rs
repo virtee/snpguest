@@ -22,7 +22,7 @@ pub struct KeyArgs {
 
     /// Specify which Guest Field Select bits to enable. It is a 6 digit binary string. For each bit, 0 denotes off and 1 denotes on.
     /// The least significant (rightmost) bit is Guest Policy followed by Image ID, Family ID, Measurement, SVN, TCB Version which is the most significant (leftmost) bit.
-    #[arg(short, long = "guest_file_select", value_name = "######")]
+    #[arg(short, long = "guest_field_select", value_name = "######")]
     pub gfs: Option<String>,
 
     /// Specify the guest SVN to mix into the key. Must not exceed the guest SVN provided at launch in the ID block.
