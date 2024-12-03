@@ -35,6 +35,6 @@ rand = "0.8.5"
 tss-esapi = { version = "7.2", optional=true }
 msru = "0.2.0"
 colorful = "0.2.2"
-bitfield = "0.13.2"
+bitfield = "0.15.0"
 clap-num = "1.1.1"
 base64 = "0.22.1"
