@@ -9,7 +9,7 @@ use std::{fs, path::PathBuf, str::FromStr};
 
 use reqwest::blocking::{get, Response};
 
-use sev::firmware::host::CertType;
+use sev::{certs::snp::ca::Chain, firmware::host::CertType};
 
 use certs::{write_cert, CertFormat};
 
@@ -114,7 +114,6 @@ pub fn cmd(cmd: FetchCmd) -> Result<()> {
 
 mod cert_authority {
     use super::*;
-    use openssl::x509::X509;
     use reqwest::StatusCode;
 
     #[derive(Parser)]
@@ -140,7 +139,7 @@ mod cert_authority {
     pub fn request_ca_kds(
         processor_model: ProcType,
         endorser: &Endorsement,
-    ) -> Result<Vec<X509>, anyhow::Error> {
+    ) -> Result<Chain, anyhow::Error> {
         const KDS_CERT_SITE: &str = "https://kdsintf.amd.com";
         const KDS_CERT_CHAIN: &str = "cert_chain";
 
@@ -161,7 +160,7 @@ mod cert_authority {
                     .context("Unable to parse AMD certificate chain")?
                     .to_vec();
 
-                let certificates = X509::stack_from_pem(&body)?;
+                let certificates = Chain::from_pem_bytes(&body)?;
 
                 Ok(certificates)
             }
@@ -179,8 +178,8 @@ mod cert_authority {
             fs::create_dir(&args.certs_dir).context("Could not create certs folder")?;
         }
 
-        let ark_cert = &certificates[1];
-        let ask_cert = &certificates[0];
+        let ark_cert = certificates.ark;
+        let ask_cert = certificates.ask;
 
         write_cert(
             &args.certs_dir,
