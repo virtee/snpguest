@@ -57,7 +57,7 @@ mod measurement {
         /// Milan-v1, EPYC-Milan-v2, EPYC-Genoa, EPYC-Genoa-v1)
         #[arg(long, value_name = "vcpu-type", 
             conflicts_with_all = ["vcpu_sig", "vcpu_family", "vcpu_model", "vcpu_stepping"], 
-            required_unless_present_all(["vcpu_sig", "vcpu_family", "vcpu_model", "vcpu_stepping"],
+            required_unless_present_any(["vcpu_sig", "vcpu_family", "vcpu_model", "vcpu_stepping"],
         ), ignore_case = true)]
         pub vcpu_type: Option<String>,
 
