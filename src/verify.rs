@@ -5,6 +5,8 @@ use super::*;
 
 use certs::{convert_path_to_cert, CertPaths};
 
+use fetch::{get_processor_model, ProcType};
+
 use std::{
     io::ErrorKind,
     path::{Path, PathBuf},
@@ -160,6 +162,7 @@ mod attestation {
         Snp,
         Ucode,
         HwId,
+        Fmc,
     }
 
     // OID extensions for the VCEK, will be used to verify attestation report
@@ -171,6 +174,7 @@ mod attestation {
                 SnpOid::Snp => oid!(1.3.6 .1 .4 .1 .3704 .1 .3 .3),
                 SnpOid::Ucode => oid!(1.3.6 .1 .4 .1 .3704 .1 .3 .8),
                 SnpOid::HwId => oid!(1.3.6 .1 .4 .1 .3704 .1 .4),
+                SnpOid::Fmc => oid!(1.3.6 .1 .4 .1 .3704 .1 .3 .9),
             }
         }
     }
@@ -184,6 +188,10 @@ mod attestation {
         /// Path to attestation report to use for validation.
         #[arg(value_name = "att-report-path", required = true)]
         pub att_report_path: PathBuf,
+
+        /// Specify the processor model to verify the attestation report.
+        #[arg(short, long, value_name = "processor-model", ignore_case = true)]
+        pub processor_model: Option<ProcType>,
 
         /// Run the TCB Verification Exclusively.
         #[arg(short, long, conflicts_with = "signature")]
@@ -208,8 +216,9 @@ mod attestation {
         // Get the attestation report signature
         let ar_signature = EcdsaSig::try_from(&att_report.signature)
             .context("Failed to get ECDSA Signature from attestation report.")?;
-        let signed_bytes = &bincode::serialize(&att_report)
-            .context("Failed to get the signed bytes from the attestation report.")?[0x0..0x2A0];
+        let mut report_bytes = Vec::new();
+        att_report.write_bytes(&mut report_bytes)?;
+        let signed_bytes = &report_bytes[0x0..0x2A0];
 
         let mut hasher: Sha384 = Sha384::new();
 
@@ -293,6 +302,7 @@ mod attestation {
     fn verify_attestation_tcb(
         vcek: Certificate,
         att_report: AttestationReport,
+        proc_model: ProcType,
         quiet: bool,
     ) -> Result<()> {
         let vek_der = vcek.to_der().context("Could not convert VEK to der.")?;
@@ -359,13 +369,39 @@ mod attestation {
         // Compare HWID information only on VCEK
         if common_name == CertType::VCEK {
             if let Some(cert_hwid) = extensions.get(&SnpOid::HwId.oid()) {
-                if !check_cert_bytes(cert_hwid, &att_report.chip_id) {
+                if !check_cert_bytes(cert_hwid, &*att_report.chip_id) {
                     return Err(anyhow::anyhow!(
                         "Report TCB ID and Certificate ID mismatch encountered."
                     ));
                 }
                 if !quiet {
                     println!("Chip ID from certificate matches the attestation report.");
+                }
+            }
+        }
+
+        if proc_model == ProcType::Turin {
+            if att_report.version < 3 {
+                return Err(anyhow::anyhow!(
+                    "Turin Attestation is not supported in version 2 of the report."
+                ));
+            }
+            if let Some(cert_fmc) = extensions.get(&SnpOid::Fmc.oid()) {
+                let fmc = if let Some(fmc) = att_report.reported_tcb.fmc {
+                    fmc
+                } else {
+                    return Err(anyhow::anyhow!(
+                        "Attestation report TCB FMC is not present in the report. it is expecter for a {} model.", proc_model
+                    ));
+                };
+
+                if !check_cert_bytes(cert_fmc, fmc.to_le_bytes().as_slice()) {
+                    return Err(anyhow::anyhow!(
+                        "Report TCB FMC and Certificate FMC mismatch encountered."
+                    ));
+                }
+                if !quiet {
+                    println!("Reported TCB FMC from certificate matches the attestation report.");
                 }
             }
         }
@@ -378,8 +414,16 @@ mod attestation {
         let att_report = if !args.att_report_path.exists() {
             return Err(anyhow::anyhow!("No attestation report was found. Provide an attestation report to request VEK from the KDS."));
         } else {
-            report::read_report(args.att_report_path)
+            report::read_report(args.att_report_path.clone())
                 .context("Could not open attestation report")?
+        };
+
+        let proc_model = if let Some(proc_model) = args.processor_model {
+            proc_model
+        } else {
+            let att_report = report::read_report(args.att_report_path.clone())
+                .context("Could not open attestation report")?;
+            get_processor_model(att_report)?
         };
 
         // Get VEK and its public key.
@@ -393,13 +437,13 @@ mod attestation {
 
         if args.tcb || args.signature {
             if args.tcb {
-                verify_attestation_tcb(vek.clone(), att_report, quiet)?;
+                verify_attestation_tcb(vek.clone(), att_report, proc_model, quiet)?;
             }
             if args.signature {
                 verify_attestation_signature(vek, att_report, quiet)?;
             }
         } else {
-            verify_attestation_tcb(vek.clone(), att_report, quiet)?;
+            verify_attestation_tcb(vek.clone(), att_report, proc_model, quiet)?;
             verify_attestation_signature(vek, att_report, quiet)?;
         }
 
