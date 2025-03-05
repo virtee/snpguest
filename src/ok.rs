@@ -1,6 +1,8 @@
 use super::*;
 
 use std::fmt;
+use std::fs::File;
+use std::io::{BufRead, BufReader};
 
 use bitfield::bitfield;
 use colorful::*;
@@ -11,6 +13,7 @@ const SEV_MASK: usize = 1;
 const ES_MASK: usize = 1 << 1;
 const SNP_MASK: usize = 1 << 2;
 const MSR_SEV_STATUS: u32 = 0xC0010131;
+const SEV_STATUS_SYSFS_FILENAME: &str = "/sys/devices/system/cpu/sev/sev_status";
 
 type TestFn = dyn Fn() -> TestResult;
 
@@ -73,7 +76,7 @@ impl fmt::Display for TestState {
 }
 
 fn collect_tests() -> Vec<Test> {
-    // Grab your MSR value one time.
+    // Grab SEV_STATUS one time.
     let temp_bitfield = match get_sev_status() {
         Ok(temp_bitfield) => temp_bitfield,
         Err(e) => {
@@ -347,10 +350,23 @@ fn emit_skip(tests: &[Test], level: usize, quiet: bool) {
     }
 }
 
-fn get_sev_status() -> Result<SevStatus, anyhow::Error> {
+fn get_status_sysfs() -> Result<SevStatus, anyhow::Error> {
+    let status_file = File::open(SEV_STATUS_SYSFS_FILENAME)?;
+    let mut reader = BufReader::new(status_file);
+    let mut buffer = String::new();
+
+    reader.read_line(&mut buffer)?;
+    Ok(SevStatus(u64::from_str_radix(buffer.trim(), 16)?))
+}
+
+fn get_status_msr() -> Result<SevStatus, anyhow::Error> {
     let mut msr = Msr::new(MSR_SEV_STATUS, 0).context("Error Reading MSR")?;
     let my_bitfield = SevStatus(msr.read()?);
     Ok(my_bitfield)
+}
+
+fn get_sev_status() -> Result<SevStatus, anyhow::Error> {
+    get_status_sysfs().or_else(|_| get_status_msr())
 }
 
 fn run_msr_check(check_bit: u64, sev_feature: &str, optional_field: bool) -> TestResult {
