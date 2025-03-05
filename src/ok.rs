@@ -10,6 +10,8 @@ use serde::{Deserialize, Serialize};
 const SEV_MASK: usize = 1;
 const ES_MASK: usize = 1 << 1;
 const SNP_MASK: usize = 1 << 2;
+const MSR_SEV_STATUS: u32 = 0xC0010131;
+
 type TestFn = dyn Fn() -> TestResult;
 
 struct Test {
@@ -72,11 +74,11 @@ impl fmt::Display for TestState {
 
 fn collect_tests() -> Vec<Test> {
     // Grab your MSR value one time.
-    let temp_bitfield = match get_values(0xC0010131, 0) {
+    let temp_bitfield = match get_sev_status() {
         Ok(temp_bitfield) => temp_bitfield,
         Err(e) => {
             return vec![Test {
-                name: "Error reading MSR",
+                name: "Error reading SEV_STATUS",
                 gen_mask: SEV_MASK,
                 run: Box::new(move || TestResult {
                     name: "Error reading MSR".to_string(),
@@ -345,8 +347,8 @@ fn emit_skip(tests: &[Test], level: usize, quiet: bool) {
     }
 }
 
-fn get_values(reg: u32, cpu: u16) -> Result<SevStatus, anyhow::Error> {
-    let mut msr = Msr::new(reg, cpu).context("Error Reading MSR")?;
+fn get_sev_status() -> Result<SevStatus, anyhow::Error> {
+    let mut msr = Msr::new(MSR_SEV_STATUS, 0).context("Error Reading MSR")?;
     let my_bitfield = SevStatus(msr.read()?);
     Ok(my_bitfield)
 }
