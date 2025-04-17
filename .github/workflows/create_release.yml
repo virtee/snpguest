@@ -1,31 +1,75 @@
-on:
-  push:
-    tags:
-      - 'v[0-9]+.[0-9]+.[0-9]+'
-name: release
-jobs:
-  release:
-    name: Create Release
-    runs-on: ubuntu-latest
-    steps:
-      - run: sudo apt-get install -y asciidoctor musl-tools
-      - uses: actions/checkout@v2
-      - uses: actions-rs/toolchain@v1
-        with:
-          toolchain: stable
-          target: x86_64-unknown-linux-musl
-          override: true
-      - uses: actions-rs/cargo@v1
-        with:
-          command: build
-          args: --release --target x86_64-unknown-linux-musl
-      - uses: actions-rs/cargo@v1
-        with:
-          command: test
-          args: --release --target x86_64-unknown-linux-musl
-      - uses: softprops/action-gh-release@v1
-        with:
-          files: target/x86_64-unknown-linux-musl/release/snpguest
-          generate_release_notes: true
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+permissions:  
+  contents: write  
+  
+on:  
+  push:  
+    branches: [main, master]  
+    tags:  
+      - 'v[0-9]+.[0-9]+.[0-9]+'  
+  pull_request:  
+    branches: [main, master]  
+  workflow_dispatch:  
+  
+name: Build and Release  
+  
+jobs:  
+  build:  
+    name: Build and Test  
+    runs-on: ubuntu-latest  
+    steps:  
+      - run: sudo apt-get install -y asciidoctor musl-tools  
+      - uses: actions/checkout@v2  
+      - uses: actions-rs/toolchain@v1  
+        with:  
+          toolchain: stable  
+          target: x86_64-unknown-linux-musl  
+          override: true  
+        
+      - name: Build  
+        uses: actions-rs/cargo@v1  
+        with:  
+          command: build  
+          args: --release --target x86_64-unknown-linux-musl  
+        
+      - name: Test  
+        uses: actions-rs/cargo@v1  
+        with:  
+          command: test  
+          args: --release --target x86_64-unknown-linux-musl  
+        
+      - name: Verify binary exists  
+        run: ls -la target/x86_64-unknown-linux-musl/release/snpguest  
+        
+      - name: Upload Build Artifact  
+        uses: actions/upload-artifact@v2  
+        with:  
+          name: snpguest-binary  
+          path: target/x86_64-unknown-linux-musl/release/snpguest  
+  
+  release:  
+    name: Create Release  
+    needs: build  
+    if: startsWith(github.ref, 'refs/tags/v')  
+    runs-on: ubuntu-latest  
+    steps:  
+      - uses: actions/checkout@v2  
+        
+      - name: Download Build Artifact  
+        uses: actions/download-artifact@v2  
+        with:  
+          name: snpguest-binary  
+          path: ./  
+        
+      - name: Make binary executable  
+        run: |  
+          ls -la  
+          chmod +x ./snpguest  
+        
+      - name: Create GitHub Release  
+        uses: softprops/action-gh-release@v1  
+        with:  
+          files: ./snpguest  
+          generate_release_notes: true  
+        env:  
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}  
+
