@@ -1,31 +1,85 @@
-on:
-  push:
-    tags:
-      - 'v[0-9]+.[0-9]+.[0-9]+'
-name: release
-jobs:
-  release:
-    name: Create Release
-    runs-on: ubuntu-latest
-    steps:
-      - run: sudo apt-get install -y asciidoctor musl-tools
-      - uses: actions/checkout@v2
-      - uses: actions-rs/toolchain@v1
-        with:
-          toolchain: stable
-          target: x86_64-unknown-linux-musl
-          override: true
-      - uses: actions-rs/cargo@v1
-        with:
-          command: build
-          args: --release --target x86_64-unknown-linux-musl
-      - uses: actions-rs/cargo@v1
-        with:
-          command: test
-          args: --release --target x86_64-unknown-linux-musl
-      - uses: softprops/action-gh-release@v1
-        with:
-          files: target/x86_64-unknown-linux-musl/release/snpguest
-          generate_release_notes: true
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+permissions:  
+  contents: write  
+  
+on:  
+  workflow_dispatch:  
+    inputs:  
+      create_release:  
+        description: 'Create a release from current commit'  
+        type: boolean  
+        default: false  
+      release_name:  
+        description: 'Release name (optional)'  
+        required: false  
+        type: string  
+  push:  
+    branches: [main, master]  
+    tags:  
+      - "v[0-9]+.[0-9]+.[0-9]+"  
+  pull_request:  
+    branches: [main, master]  
+  
+name: Build and Release  
+  
+jobs:  
+  build:  
+    name: Build and Test  
+    runs-on: ubuntu-latest  
+    steps:  
+      - run: sudo apt-get install -y asciidoctor musl-tools  
+      - uses: actions/checkout@v4  
+      - uses: actions-rs/toolchain@v1  
+        with:  
+          toolchain: stable  
+          target: x86_64-unknown-linux-musl  
+          override: true  
+  
+      - name: Build  
+        uses: actions-rs/cargo@v1  
+        with:  
+          command: build  
+          args: --release --target x86_64-unknown-linux-musl  
+  
+      - name: Test  
+        uses: actions-rs/cargo@v1  
+        with:  
+          command: test  
+          args: --release --target x86_64-unknown-linux-musl  
+  
+      - name: Verify binary exists  
+        run: ls -la target/x86_64-unknown-linux-musl/release/snpguest  
+  
+      - name: Upload Build Artifact  
+        uses: actions/upload-artifact@v4  
+        with:  
+          name: snpguest-binary  
+          path: target/x86_64-unknown-linux-musl/release/snpguest  
+  
+  release:  
+    name: Create Release  
+    needs: build  
+    if: startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'workflow_dispatch' && github.event.inputs.create_release == 'true')  
+    runs-on: ubuntu-latest  
+    steps:  
+      - uses: actions/checkout@v4  
+  
+      - name: Download Build Artifact  
+        uses: actions/download-artifact@v4  
+        with:  
+          name: snpguest-binary  
+          path: ./  
+  
+      - name: Make binary executable  
+        run: |  
+          ls -la  
+          chmod +x ./snpguest  
+  
+      - name: Create GitHub Release  
+        uses: softprops/action-gh-release@v2  
+        with:  
+          files: ./snpguest  
+          generate_release_notes: true  
+          name: ${{ github.event.inputs.release_name || '' }}  
+          tag_name: ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || format('manual-release-{0}', github.sha) }}  
+        env:  
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}  
