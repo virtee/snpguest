@@ -60,32 +60,38 @@ COMMANDS
     -h, --help  show a help message
 
 *snpguest fetch ca*::
-    usage: snpguest fetch ca $ENCODING $PROCESSOR_MODEL $CERTS_DIR
+    usage: snpguest fetch ca $ENCODING $CERTS_DIR $PROCESSOR_MODEL [-r, --report] $ATT_REPORT_PATH [-E --endorser] $ENDORSEMENT
 
     Requests the certificate authority chain (ARK & ASK) from the KDS.
-    The user needs to specify the certificate encoding they would like store the certs in [PEM | DER].
-    Currently only PEM and DER encondings are supported.
-    Both of the certs will be in the same encoding.
-    The user must specify their host processor model [Milan | Genoa].
+    The user needs to specify the certificate encoding they would like to store the certs in [PEM | DER].
+    Currently, only PEM and DER encodings are supported.
+    Both certificates will be in the same encoding.
     The user needs to provide the path to the directory where the certs will be stored.
     If the certificates already exist in the provided directory, they will be overwritten.
+    The user must either pass a V3 attestation report or manually specify the host processor model using the --processor_model flag.
+    This ensures the correct CA certificates for attestation are retrieved from the KDS. [Milan | Genoa | Bergamo | Siena | Turin]
+    Lastly, the user may specify the endorser they would like the CA chain for using the --endorser flag. [VCEK | VLEK]
+    It will default to VCEK.
 
     options:
     -h, --help show a help message
+    -p, -processor_model Specify processor model to retrieve the CA certificates for.
+    -e, --enodorse  Specify the endorser type to get the Ca certificates for. (defaults to: VCEK)
 
 *snpguest fetch vcek*::
-    usage: snpguest fetch vcek $ENCODING $PROCESSOR_MODEL $CERTS_DIR $ATT_REPORT_PATH
+    usage: snpguest fetch vcek $ENCODING $CERTS_DIR $ATT_REPORT_PATH [-p, --processor_model] $PROCESSOR_MODEL
 
     Requests the VCEK certificate from the KDS.
     The user needs to specify the certificate encoding they would like store the cert in [PEM | DER].
     Currently only PEM and DER encondings are supported.
-    The user must specify their host processor model [Milan | Genoa].
     The user needs to provide the path to the directory where the VCEK will be stored.
     If the certificate already exists in the provided directory, it will be overwritten.
-    The user also needs to provide the path to a stored attestation report that will be used to request the VCEK.
+    The user must either pass a V3 attestation report or manually specify the host processor model using the --processor_model flag.
+    This ensures the correct VCEK certificate for attestation is retrieved from the KDS. [Milan | Genoa | Bergamo | Siena | Turin]
 
     options:
     -h, --help show a help message
+    -p, --processor_model Specify processor model to retrieve the VCEK certificates for.
 
 *snpguest guest verify certs*::
     usage: snpguest verify certs $CERTS_DIR
@@ -98,17 +104,22 @@ COMMANDS
     -h, --help show a help message
 
 *snpguest verify attestation*::
-    usage: snpguest verify attestation $CERTS_DIR $ATT_REPORT_PATH [-t, --tcb] [-s, --signature]
+    usage: snpguest verify attestation $CERTS_DIR $ATT_REPORT_PATH [-p, --processor_model] $PROCESSOR_MODEL [-t, --tcb] [-s, --signature]
 
-    Verifies the contents of the Attestation Report using the VCEK certificate.
-    The user needs to provide the path to the directory containing the VCEK certificate.
+    Verifies the contents of the Attestation Report using a VEK certificate.
+    The user needs to provide the path to the directory containing the VEK certificate.
+    The tool will automatically recognize whether it's a VLEK or VCEK.
+    If both a VLEK and a VCEK are in the directory, then the VCEK will be used.
     The user also needs to provide the path to a stored attestation report to be verified.
-    Error will be raised if the attestation verification fails at any point.
+    If the report is not version 3 or newer, then the user can specify the cpu model to verify using the --processor_model flag.
+    If no processor model is passed, and the report is a version 2, then the verification will be treated as a Genoa or older verification.
+    An error will be raised if the attestation verification fails at any point.
     The user can use the [-t, --tcb] flag to only validate the tcb contents of the report.
     The user can use the [-s, --signature] flag to only validate the report signature.
 
     options:
     -h, --help show a help message
+    -p, --processor_model Specify the processor model to use for verification
     -t, --tcb verify the tcb section of the report only
     -s, --signature verify the signature of the report only
 
