@@ -1,31 +1,74 @@
+permissions:
+  contents: write
+
 on:
   push:
+    branches: [main, master]
     tags:
-      - 'v[0-9]+.[0-9]+.[0-9]+'
-name: release
+      - "v[0-9]+.[0-9]+.[0-9]+"
+  pull_request:
+    branches: [main, master]
+  workflow_dispatch:
+
+name: Build and Release
+
 jobs:
-  release:
-    name: Create Release
+  build:
+    name: Build and Test
     runs-on: ubuntu-latest
     steps:
       - run: sudo apt-get install -y asciidoctor musl-tools
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v4
       - uses: actions-rs/toolchain@v1
         with:
           toolchain: stable
           target: x86_64-unknown-linux-musl
           override: true
-      - uses: actions-rs/cargo@v1
+
+      - name: Build
+        uses: actions-rs/cargo@v1
         with:
           command: build
           args: --release --target x86_64-unknown-linux-musl
-      - uses: actions-rs/cargo@v1
+
+      - name: Test
+        uses: actions-rs/cargo@v1
         with:
           command: test
           args: --release --target x86_64-unknown-linux-musl
-      - uses: softprops/action-gh-release@v1
+
+      - name: Verify binary exists
+        run: ls -la target/x86_64-unknown-linux-musl/release/snpguest
+
+      - name: Upload Build Artifact
+        uses: actions/upload-artifact@v4
         with:
-          files: target/x86_64-unknown-linux-musl/release/snpguest
+          name: snpguest-binary
+          path: target/x86_64-unknown-linux-musl/release/snpguest
+
+  release:
+    name: Create Release
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download Build Artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: snpguest-binary
+          path: ./
+
+      - name: Make binary executable
+        run: |
+          ls -la
+          chmod +x ./snpguest
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: ./snpguest
           generate_release_notes: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
