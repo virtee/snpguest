@@ -86,15 +86,15 @@ mod measurement {
         pub ovmf: PathBuf,
 
         /// Kernel file to calculate measurement from
-        #[arg(short, long, value_name = "kernel", requires_all = ["append", "initrd"])]
+        #[arg(short, long, value_name = "kernel")]
         pub kernel: Option<PathBuf>,
 
         /// Initrd file to calculate measurement from
-        #[arg(short, long, value_name = "initrd", requires_all = ["kernel", "append"])]
+        #[arg(short, long, value_name = "initrd", requires = "kernel")]
         pub initrd: Option<PathBuf>,
 
         /// Kernel command line to calculate measurement from
-        #[arg(short, long, value_name = "append", requires_all = ["kernel", "initrd"])]
+        #[arg(short, long, value_name = "append", requires = "kernel")]
         pub append: Option<String>,
 
         /// Hex representation of the guest kernel features expected to be included, defaults to 0x1
