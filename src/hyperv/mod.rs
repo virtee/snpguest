@@ -4,6 +4,7 @@
 use super::*;
 
 use std::arch::x86_64::__cpuid;
+use std::mem::size_of;
 
 const CPUID_GET_HIGHEST_FUNCTION: u32 = 0x80000000;
 const CPUID_PROCESSOR_INFO_AND_FEATURE_BITS: u32 = 0x1;
@@ -20,6 +21,12 @@ const CPUID_HYPERV_CPU_MANAGEMENT: u32 = 1 << 12;
 const CPUID_HYPERV_ISOLATION_CONFIG: u32 = 0x4000000C;
 const CPUID_HYPERV_ISOLATION_TYPE_MASK: u32 = 0xf;
 const CPUID_HYPERV_ISOLATION_TYPE_SNP: u32 = 2;
+
+const RSV1_SIZE: usize = size_of::<u32>() * 8;
+const REPORT_SIZE: usize = 1184;
+const RSV2_SIZE: usize = size_of::<u32>() * 5;
+const TOTAL_SIZE: usize = RSV1_SIZE + REPORT_SIZE + RSV2_SIZE;
+const REPORT_RANGE: std::ops::Range<usize> = RSV1_SIZE..(RSV1_SIZE + REPORT_SIZE);
 
 pub fn present() -> bool {
     let mut cpuid = unsafe { __cpuid(CPUID_PROCESSOR_INFO_AND_FEATURE_BITS) };
@@ -109,9 +116,17 @@ pub mod report {
     }
 
     fn hcl_report(bytes: &[u8]) -> Result<AttestationReport> {
-        let hcl: Hcl =
-            bincode::deserialize(bytes).context("unable to deserialize bytes from vTPM")?;
+        if bytes.len() < TOTAL_SIZE {
+            return Err(anyhow!(
+                "HCL report size mismatch: expected at least {}, got {}",
+                TOTAL_SIZE,
+                bytes.len()
+            ));
+        }
 
-        Ok(hcl.report)
+        let report_bytes = &bytes[REPORT_RANGE];
+
+        AttestationReport::from_bytes(report_bytes)
+            .context("Unable to convert HCL report bytes to AttestationReport")
     }
 }
