@@ -68,7 +68,6 @@ pub fn present() -> bool {
 
 pub mod report {
     use super::*;
-
     use anyhow::{anyhow, Context};
     use serde::{Deserialize, Serialize};
     use sev::firmware::guest::AttestationReport;
@@ -109,9 +108,16 @@ pub mod report {
     }
 
     fn hcl_report(bytes: &[u8]) -> Result<AttestationReport> {
-        let hcl: Hcl =
-            bincode::deserialize(bytes).context("unable to deserialize bytes from vTPM")?;
+        const RSV1_SIZE: usize = size_of::<u32>() * 8;
+        const REPORT_SIZE: usize = 1184usize;
+        const RSV2_SIZE: usize = size_of::<u32>() * 5;
+        let hcl_size = RSV1_SIZE + REPORT_SIZE + RSV2_SIZE;
+        if bytes.len() < hcl_size {
+            return Err(anyhow!("HCL report size mismatch"));
+        }
+        let report_bytes = &bytes[RSV1_SIZE..(RSV1_SIZE + REPORT_SIZE)];
 
-        Ok(hcl.report)
+        Ok(AttestationReport::from_bytes(report_bytes)
+            .context("unable to convert HCL report bytes to AttestationReport")?)
     }
 }
