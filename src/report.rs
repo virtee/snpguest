@@ -140,16 +140,23 @@ pub fn get_report(args: ReportArgs, hv: bool) -> Result<()> {
      * Write reports report data (only for --random or --platform).
      */
     if args.random {
-        reqdata_write(args.request_file, &report).context("unable to write random request data")?;
+        if let Some(data) = data {
+            reqdata_write(args.request_file, &data)
+                .context("unable to write random request data to specified file")?;
+        } else {
+            return Err(anyhow!("unable to write empty buffer to specified file."));
+        }
     } else if args.platform {
-        reqdata_write(args.request_file, &report)
+        // Because random data cannot be provided for platform, we will pull the
+        // data provided by the vTPM from the report.
+        reqdata_write(args.request_file, &*report.report_data)
             .context("unable to write platform request data")?;
     }
 
     Ok(())
 }
 
-fn reqdata_write(name: PathBuf, report: &AttestationReport) -> Result<()> {
+fn reqdata_write(name: PathBuf, report_data: &[u8]) -> Result<()> {
     let mut file = OpenOptions::new()
         .create(true)
         .truncate(true)
@@ -157,21 +164,6 @@ fn reqdata_write(name: PathBuf, report: &AttestationReport) -> Result<()> {
         .open(name)
         .context("unable to create or write to request data file")?;
 
-    write_hex(&mut file, report.report_data.as_slice())
+    file.write_all(report_data)
         .context("unable to write report data to REQUEST_FILE")
-}
-
-pub fn write_hex(file: &mut File, data: &[u8]) -> Result<()> {
-    let mut line_counter = 0;
-    for val in data {
-        // Make it blocks for easier read
-        if line_counter.eq(&16) {
-            writeln!(file)?;
-            line_counter = 0;
-        }
-
-        write!(file, "{:02x}", val)?;
-        line_counter += 1;
-    }
-    Ok(())
 }
