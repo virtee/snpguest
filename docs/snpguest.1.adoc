@@ -27,18 +27,22 @@ COMMANDS
 --------
 *snpguest report*::
     usage: snpguest report $ATT_REPORT_PATH $REQUEST_FILE [-v, --vmpl] $VMPL [-r, --random] [-p, --platform]
-    
-    Requests an attestation report from the host and writes it in a file with the provided request data and vmpl. 
+
+    Requests an attestation report from the host and writes it in a file with the provided request data and vmpl.
     Will write the contents of the attestation report in binary format into the specified report path.
     A path for the attestation report must be provided.
-    User can pass 64 bytes of data in any file format into $REQUEST_FILE in order to use that data to request the attestation report.
+    User can pass 64 bytes of data in raw binary format into $REQUEST_FILE in order to use that data to request the attestation report.
     The user can use the --random flag to generate and use random data for request data.
     For Microsoft Hyper-V guests, a user can use the --platform flag to use the request data that was pre-generated
     from the platform. Currently, for Hyper-V guests, --platform is required, as there is no ability to write
     request data for the attestation report.
-    If the user uses the --random flag, then the data will be written into the file they provided in $REQUEST_FILE.
+    If --random is used, the random data was will be written in raw bytes into $REQUEST_FILE, instead of reading from that file.
+    For Microsoft Hyper-V guests, a user can use the --platform flag to use the request data that was pre-generated
+    from the platform. Currently, for Hyper-V guests, --platform is required, as there is no ability to write
+    request data for the attestation report.
+    The pre-generated data will be taken from the platform attestation report and then written in raw byte format into $REQUEST_FILE.
     VMPL is an optional parameter and it defaults to 1.
-    
+
     options:
     -h, --help  show a help message.
     -p, --platform Use platform generated 64 bytes of data to pass for the report request (Only available for Hyper-V).
@@ -47,7 +51,7 @@ COMMANDS
 
 *snpguest certificates*::
     usage: snpguest certificates $ENCODING $CERTS_DIR
-    
+
     Requests the certificate chain (ASK, ARK & VCEK) from host memory (requests extended-config).
     The user needs to specify the certificate encoding they would like store the certs in [PEM | DER].
     Currently only PEM and DER encondings are supported.
@@ -55,7 +59,7 @@ COMMANDS
     The user also needs to provide the path to the directory where the certs will be stored.
     If the certificate already exists in the provided directory, it will be overwritten.
     The attestation report will be ingored for this request, to request and store an attestation report use the "report" command.
-    
+
     options:
     -h, --help  show a help message
 
@@ -125,12 +129,12 @@ COMMANDS
 
 *snpguest key*::
     usage: snpguest key $KEY_PATH $ROOT_KEY_SELECT [-g, --guest_field_select] [-s, --guest_svn] [-t, --tcb_version] [-v, --vmpl]
-    
+
     Creates the derived key based on input parameters and stores it.
     $KEY_PATH is the path to store the derived key.
     $ROOT_KEY_SELECT is the root key from which to derive the key. Input either "vcek" or "vmrk".
     The --guest_field_select option specifies which Guest Field Select bits to enable. It is a 6 digit binary string. For each bit, 0 denotes off and 1 denotes on.
-    The least significant (rightmost) bit is Guest Policy followed by Image ID, Family ID, Measurement, SVN, TCB Version which is the most significant (leftmost) bit. 
+    The least significant (rightmost) bit is Guest Policy followed by Image ID, Family ID, Measurement, SVN, TCB Version which is the most significant (leftmost) bit.
      example: snpguest key $KEY_PATH $ROOT_KEY_SELECT --guest_field_select 100001 (Denotes Guest Policy:On, Image ID:Off, Family ID:Off, Measurement:Off, SVN:Off, TCB Version:On)
     The --guest_svn specifies the guest SVN to mix into the key. Must not exceed the guest SVN provided at launch in the ID block.
     The --tcb_version specified the TCB version to mix into the derived key. Must not exceed CommittedTcb.
@@ -138,15 +142,15 @@ COMMANDS
 
     options:
     -h, --help show a help message
-    -g, --guest_field_select      Specify which Guest Field Select bits to enable. 
+    -g, --guest_field_select      Specify which Guest Field Select bits to enable.
     -s, --guest_svn                Specify the guest SVN to mix into the key.
-    -t, --tcb_version               Specify the TCB version to mix into the derived key. 
+    -t, --tcb_version               Specify the TCB version to mix into the derived key.
     -v, --vmpl                      Specify VMPL level the Guest is running on. Defaults to 1.
 
 *snpguest generate measurement*::
     usage: snpguest generate measurement [-v, --vcpus] [--vcpu-type] [--vcpu-sig] [--vcpu-family] [--vcpu-model] [--vcpu-stepping] [-t, --vmm-type] [-o ,--ovmf] [-k, --kernel]
             [-i, --initrd] [-a, --append] [-g, --guest-features] [--ovmf-hash] [-f, --output-format] [-m, --measurement-file]
-    
+
     Calculates a secure guest expected launch digest measurement.
     Every parameter passed in is used to calculate this measurement, but the user does not need to provide every parameter.
     The only mandatory parameters are the [-o, --ovmf] parameter which is a path to the ovmf file used to launch the secure guest, and provide the guest vcpu type.
@@ -157,7 +161,7 @@ COMMANDS
             Family, model and stepping have to be used together, if they're not all provided together an error will be raised.
     If the user provides the [-k, --kernel] parameter to calculate the measurement, they also need to provide [-i, --initrd] and [-a, --append].
     There were kernel features added that affect the result of the measurement if those are enabled. With the [-g, --guest-features] parameter the user can provide which of this features are enabled in their kernel.
-    The [-g, --guest-features] can be a hex or decimal number that cover the features enabled. 
+    The [-g, --guest-features] can be a hex or decimal number that cover the features enabled.
     For information on the guest-features bitfield checkout: https://github.com/virtee/sev/blob/a3c91d7b6e742c1b5685a7e0c1e5464819527b06/src/measurement/vmsa.rs#L139
     A user can use a pre-calculated ovmf-hash using [--ovmf-hash], but the ovmf file still has to be provided.
     The calculated measurement will be printed in the console, if the user wishes to store the measurement value they can provide a file path with [-m, --measurement-file] and the measurement will get written there.
@@ -180,10 +184,10 @@ COMMANDS
     --ovmf-hash  Precalculated hash of the OVMF binary
     -f, --output-format  Output format (base64, hex). [default: hex]
     -m, --measurement-file Optional file path where the measurement value can be stored in
- 
+
 *snpguest generate ovmf-hash*::
     usage: snpguest generate ovmf-hash [-o, --ovmf] [-f, --output--format] [--hash-file]
-    
+
     Calculates the hash of an ovmf file.
     User only needs to provide the file they want the hash for.
     The hash will be printed in the console, if the user wishes to store the hash value they can provide a file path with [--hash-file] and the hash will get written there.
@@ -196,9 +200,9 @@ COMMANDS
     --hash-file Optional file path where the hash value can be stored in
 
 *snpguest generate id-block*::
-    usage: snpguest generate id-block $ID-BLOCK-KEY $AUTH-KEY $LAUNCH-DIGEST [-f, --family-id] [-m, --image-id] [-v, --version] [-s, --svn] [-p, --policy] 
+    usage: snpguest generate id-block $ID-BLOCK-KEY $AUTH-KEY $LAUNCH-DIGEST [-f, --family-id] [-m, --image-id] [-v, --version] [-s, --svn] [-p, --policy]
         [-i, --id-file] [-a, --auth-file]
-    
+
     Calculates an id-block and auth-block for a secure guest.
     User needs to provide a path to two different EC p384 keys in pem or der format. One will be for the id-block the other for the auth-block.
     The user will also need to provide the launch digest (in either hex or base64 format) of the secure guest.
@@ -206,7 +210,7 @@ COMMANDS
     The user can provide optional id's for further verification using the [-f, --family-id] and [-m, image-id] paramerters.
     The user can provide the security version number of the guest using [-s, --svn].
     The user can specify the launch policy of the guest using the [-p, --policy] parameter..
-    The policy can be provided in either hex or decimal format.  It will default to 0x30000. 
+    The policy can be provided in either hex or decimal format.  It will default to 0x30000.
     For more information on the guest-policy, you can refer to: https://www.amd.com/content/dam/amd/en/documents/epyc-technical-docs/specifications/56860.pdf#page=27
     The blocks will be printed in the console, if the user wishes to store the blocks values they can provide a file path with [-i, --id-file] for the id-block
     and [-a, --auth-file] for the auth-block.
@@ -224,9 +228,9 @@ COMMANDS
 
 *snpguest generate key-digest*::
     usage: snpguest generate key-digest $KEY-PATH [-d, --key-digest-file]
-    
+
     Generates an SEV key digest for a provided EC p384 key.
-    User needs to provide a path to the key 
+    User needs to provide a path to the key
     The key has to be a EC p384 key in either pem or der format.
     The digest will be printed in the console, if the user wishes to store the digest value they can provide a file path with [-d, --key-digest-file]
     If the [--quiet] flag is used, nothing wibe printed out.
