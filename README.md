@@ -210,7 +210,10 @@ Arguments
 
 - `$ATT_REPORT_PATH` : Specifies the path where the attestation report would be stored.
 
-- `$REQUEST_FILE` : File where the data generated from the hypervisor will be written into.
+- `$REQUEST_FILE`: Specifies the path to the 64-byte request file.
+  - With `--random`: writes 64 random bytes
+  - With `--platform`: writes platform provided 64 bytes
+  - Without flags: reads the existing file contents as-is
 
 Options
 
