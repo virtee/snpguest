@@ -383,6 +383,15 @@ sudo dnf groupinstall "Development Tools" "Development Libraries"
 sudo zypper in -t pattern "devel_basis"
 ```
 
+### Building for Azure Confidential VMs
+On Azure CVMs with AMD SEV-SNP, the paravisor fetches the report from AMD-SP once at VM boot time, and stores it in the vTPM NV index. The native `/dev/sev-guest` interface is hidden from the guest OS, so the guest OS must retrieve the report using the `--platform` flag, which is available only in builds compiled with the `hyperv` feature.
+
+```bash
+git clone https://github.com/virtee/snpguest.git
+cd ./snpguest
+cargo build -r --features hyperv
+```
+
 ## Reporting Bugs
 
 Please report all bugs to the [Github snpguest](https://github.com/virtee/snpguest/issues) repository.
