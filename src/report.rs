@@ -78,7 +78,13 @@ impl ReportArgs {
         }
 
         if self.platform && !hyperv {
-            return Err(anyhow!("--platform enabled yet Hyper-V guest not detected (not allowed). Consult man page."));
+            #[cfg(feature = "hyperv")]
+            let msg = "--platform enabled yet Hyper-V guest with SEV-SNP isolation not detected (not allowed). Consult man page.";
+            #[cfg(not(feature = "hyperv"))]
+            let msg =
+                "--platform requires a binary built with --features hyperv. Consult man page.";
+
+            return Err(anyhow!(msg));
         }
 
         Ok(())
