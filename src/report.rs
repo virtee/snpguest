@@ -91,16 +91,16 @@ impl ReportArgs {
     }
 }
 
-#[cfg(feature = "hyperv")]
 fn request_hardware_report(
-    _data: Option<[u8; 64]>,
+    data: Option<[u8; 64]>,
     vmpl: Option<u32>,
+    _platform: bool,
 ) -> Result<AttestationReport> {
-    hyperv::report::get(vmpl.unwrap_or(0))
-}
+    #[cfg(feature = "hyperv")]
+    if _platform {
+        return hyperv::report::get(vmpl.unwrap_or(0));
+    }
 
-#[cfg(not(feature = "hyperv"))]
-fn request_hardware_report(data: Option<[u8; 64]>, vmpl: Option<u32>) -> Result<AttestationReport> {
     let mut fw = Firmware::open().context("unable to open /dev/sev-guest")?;
     Ok(AttestationReport::from_bytes(
         fw.get_report(None, data, vmpl)
@@ -129,7 +129,7 @@ pub fn get_report(args: ReportArgs, hv: bool) -> Result<()> {
         Some(bytes)
     };
 
-    let report = request_hardware_report(data, args.vmpl)?;
+    let report = request_hardware_report(data, args.vmpl, args.platform)?;
 
     /*
      * Serialize and write attestation report.
