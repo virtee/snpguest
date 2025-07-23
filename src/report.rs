@@ -71,12 +71,6 @@ impl ReportArgs {
             ));
         }
 
-        if self.random && hyperv {
-            return Err(anyhow!(
-                "--random enabled yet Hyper-V guest detected (not allowed). Consult man page."
-            ));
-        }
-
         if self.platform && !hyperv {
             #[cfg(feature = "hyperv")]
             let msg = "--platform enabled yet Hyper-V guest with SEV-SNP isolation not detected (not allowed). Consult man page.";
