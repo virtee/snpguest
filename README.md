@@ -12,13 +12,13 @@
   - [7. verify](#7-verify)
 - [Extended Attestation Workflow](#extended-attestation-workflow)
 - [Regular Attestation Workflow](#regular-attestation-workflow)
-- [Global Options](#global-options)
 - [Extended Attestation Flowchart](#extended-attestation-flowchart)
 - [Regular Attestation Flowchart](#regular-attestation-flowchart)
 - [Building](#building)
   - [Ubuntu Dependencies](#ubuntu-dependencies)
   - [RHEL and its compatible distributions dependencies](#rhel-and-its-compatible-distributions-dependencies)
   - [openSUSE and its compatible distributions dependencies](#opensuse-and-its-compatible-distributions-dependencies)
+  - [Building for Azure Confidential VMs](#building-for-azure-confidential-vms)
 - [Reporting Bugs](#reporting-bugs)
 
 ## Usage
@@ -27,26 +27,27 @@
 
 Every `snpguest` (sub)command comes with a `--help` option for a description on its use. 
 
-Usage
+**Usage**
 ```bash
 snpguest --help
 ```
 
 ### 2. `certificates` 
 
-Requests the certificate chain (ASK, ARK & VCEK) from host memory (requests extended-config). The user needs to specify the certificate encoding to store the certificates in (PEM or DER). Currently, only PEM and DER encodings are supported. All certificates will be in the same encoding. The user also needs to provide the path to the directory where the certificates will be stored. If certificates already exist in the provided directory, they will be overwritten.
+Requests the VEK certificate chain (ARK, ASK/ASVK and VCEK/VLEK) from host memory (requests extended-config). The user needs to specify the certificate encoding to store the certificates in (PEM or DER). Currently, only PEM and DER encodings are supported. All certificates will be in the same encoding. The user also needs to provide the path to the directory where the certificates will be stored. If certificates already exist in the provided directory, they will be overwritten.
 
-Usage 
+**Usage**
 ```bash
 snpguest certificates $ENCODING $CERTS_DIR
 ```
-Arguments
+
+**Arguments**
 
 - `$ENCODING` : Specifies the certificate encoding to store the certificates in (PEM or DER).
 
 - `$CERTS_DIR` : Specifies the directory to store the certificates in. This is required only when requesting an extended attestation report.
 
-Example
+**Example**
 ```bash
 snpguest certificates pem ./certs
 ```
@@ -55,26 +56,27 @@ snpguest certificates pem ./certs
 
 Displays files in human readable form. 
 
-Usage
+**Usage**
 ```bash
 snpguest display <SUBCOMMAND>
 ```
-Subcommands
+
+**Subcommands**
 
 1. `report`
 
     When used for displaying a report, it prints the attestation report contents into the terminal. The user has to provide the path of the stored attestation report to display.
 
-    Usage
+    **Usage**
     ```bash
     snpguest display report $ATT_REPORT_PATH
     ```
 
-    Argument
+    **Argument**
 
     - `$ATT_REPORT_PATH` : Specifies the path of the stored attestation report to display.
 
-    Example
+    **Example**
     ```bash
     snpguest display report attestation-report.bin
     ```
@@ -83,16 +85,16 @@ Subcommands
 
     When used for displaying the fetched derived key's contents, it prints the derived key in hex format into the terminal. The user has to provide the path of a stored derived key to display.
 
-    Usage
+    **Usage**
 
     ```bash
     snpguest display key $KEY_PATH
     ```
-    Argument
+    **Argument**
 
     - `$KEY_PATH` : Specifies the path of the stored derived key to display.
 
-    Example
+    **Example**
     ```bash
     snpguest display key derived-key.bin
     ```
@@ -101,211 +103,217 @@ Subcommands
 
 Command to Requests certificates from the KDS.
 
-Usage
+**Usage**
 ```bash
 snpguest fetch <SUBCOMMAND>
 ```
 
-Subcommands
+**Subcommands**
 1. `ca`
 
-    Requests the certificate authority chain (ARK & ASK) from the KDS. The user needs to specify the certificate encoding to store the certificates in (PEM or DER). Currently, only PEM and DER encodings are supported. Both certificates will be in the same encoding. The user must specify their host processor model. The user also needs to provide the path to the directory where the certificates will be stored. If the certificates already exist in the provided directory, they will be overwritten. The `--endorser` argument specifies the type of attestation signing key (defaults to VCEK).
+    Requests the certificate authority chain (ARK & ASK/ASVK) from the KDS. The user needs to specify the certificate encoding to store the certificates in (PEM or DER). Currently, only PEM and DER encodings are supported. Both certificates will be in the same encoding. The user must specify their host processor model. The user also needs to provide the path to the directory where the certificates will be stored. If the certificates already exist in the provided directory, they will be overwritten. The `--endorser` argument specifies the type of attestation signing key (defaults to VCEK).
 
-    Usage
+    **Usage**
     ```bash
-    snpguest fetch ca $ENCODING $PROCESSOR_MODEL $CERTS_DIR --endorser $ENDORSER
+    # Fetch CA chain of the user-provided processor model
+    snpguest fetch ca $ENCODING $CERTS_DIR $PROCESSOR_MODEL --endorser $ENDORSER
+    # Fetch CA chain of the processor-model written in the attestation report
+    snpguest fetch ca $ENCODING $CERTS_DIR --report $ATT_REPORT_PATH --endorser $ENDORSER
     ```
-    Arguments
     
-    - `$ENCODING` : Specifies the certificate encoding to store the certificates in (PEM or DER).
-
-    - `$PROCESSOR_MODEL` : Specifies the host processor model. 
-    
-    - `$CERTS_DIR` : Specifies the directory to store the certificates in.
-    - `$ENDORSER` : Specifies the endorser type, possible values: vcek, vlek.
+    **Arguments**
+    | Argument | Description | Default |
+    | :--      | :--        | :--    |
+    | `$ENCODING` | Specifies the certificate encoding to store the certificates in (PEM or DER). | required |
+    | `$CERTS_DIR` | Specifies the directory to store the certificates in. | required |
+    | `$PROCESSOR_MODEL` | Specifies the host processor model (conflict with `$ATT_REPORT_PATH`). | required |
+    | `-r, --report $ATT_REPORT_PATH` | Specifies the attestation report to detect the host processor model (conflict with `$PROCESSOR_MODEL`) | — |
+    | `-e, --endorser $ENDORSER` | Specifies the endorser type, possible values: "vcek", "vlek". | "vcek" |
 
     Example
     ```bash
-    snpguest fetch ca der milan ./certs-kds -e vlek
+    snpguest fetch ca der ./certs-kds milan -e vlek
+    ```
+    ```bash
+    snpguest fetch ca pem ./certs-kds -r attestation-report.bin -e vcek
     ```
 
 2. `vcek`
 
     Requests the VCEK certificate from the KDS. The user needs to specify the certificate encoding to store the certificate in (PEM or DER). Currently, only PEM and DER encodings are supported. The user must specify their host processor model. The user also needs to provide the path to the directory where the VCEK will be stored and the path to a stored attestation report that will be used to request the VCEK. If the certificate already exists in the provided directory, it will be overwritten.
 
-    Usage
+    **Usage**
     ```bash
-    snpguest fetch vcek $ENCODING $PROCESSOR_MODEL $CERTS_DIR $ATT_REPORT_PATH
+    snpguest fetch vcek $ENCODING $CERTS_DIR $ATT_REPORT_PATH --processor-model $PROCESSOR_MODEL
     ```
-    Arguments
-    
-    - `$ENCODING` : Specifies the certificate encoding to store the certificates in (PEM or DER).
 
-    - `$PROCESSOR_MODEL` : Specifies the host processor model. 
-    
-    - `$CERTS_DIR` : Specifies the directory to store the certificates in. 
+    **Arguments**
+    | Argument | Description | Default |
+    | :--      | :--        | :--    |
+    | `$ENCODING` | Specifies the certificate encoding to store the certificates in (PEM or DER). | required |
+    | `$CERTS_DIR` | Specifies the directory to store the certificates in. | required |
+    | `$ATT_REPORT_PATH` | Specifies the path of the stored attestation report. | required |
+    | `-p, --processor-model $PROCESSOR_MODEL` | Specifies the host processor model. | — |
 
-    - `$ATT_REPORT_PATH` : Specifies the path of the stored attestation report.
-
-    Example
+    **Example**
     ```bash
-    snpguest fetch vcek der milan ./certs-kds attestation-report.bin
+    snpguest fetch vcek pem ./certs-kds attestation-report.bin
     ```
 
 ### 5. `key` 
 
-Creates the derived key based on input parameters and stores it. `$KEY_PATH` is the path to store the derived key. `$ROOT_KEY_SELECT` is the root key from which to derive the key (either "vcek" or "vmrk"). The `--guest_field_select` option specifies which Guest Field Select bits to enable as a 6-digit binary string. Each of the 6 bits from left to right correspond to Guest Policy, Image ID, Family ID, Measurement, SVN and TCB Version respectively. For each bit, 0 denotes off, and 1 denotes on. The `--guest_svn` option specifies the guest SVN to mix into the key, and the `--tcb_version` option specifies the TCB version to mix into the derived key. The `--vmpl` option specifies the VMPL level the Guest is running on and defaults to 1.
+Creates the derived key based on input parameters and stores it. `$KEY_PATH` is the path to store the derived key. `$ROOT_KEY_SELECT` is the root key from which to derive the key (either "vcek" or "vmrk"). The `--guest_field_select` option specifies which Guest Field Select bits to enable as a 6-digit binary string. Each of the 6 bits from *right to left* correspond to Guest Policy, Image ID, Family ID, Measurement, SVN and TCB Version respectively. For each bit, 0 denotes off, and 1 denotes on. The `--guest_svn` option specifies the guest SVN to mix into the key, and the `--tcb_version` option specifies the TCB version to mix into the derived key. The `--vmpl` option specifies the VMPL level the Guest is running on and defaults to 1.
 
 
-Usage
+**Usage**
 ```bash
-snpguest key $KEY_PATH $ROOT_KEY_SELECT [-g, --guest_field_select] [-s, --guest_svn] [-t, --tcb_version] [-v, --vmpl]
+snpguest key $KEY_PATH $ROOT_KEY_SELECT [-v, --vmpl] [-g, --guest_field_select] [-s, --guest_svn] [-t, --tcb_version]
 ```
-Arguments
 
-- `$KEY_PATH` : The path to store the derived key. 
+**Arguments**
+| Argument | Description | Default |
+| :--      | :--        | :--    |
+| `$KEY_PATH` | The path to store the derived key. | required |
+| `$ROOT_KEY_SELECT` | is the root key from which to derive the key (either "vcek" or "vmrk"). | required |
+| `-v, --vmpl $VMPL` | option specifies the VMPL level the Guest is running on. | 1 |
+| `-g, --guest_field_select $GFS` | option specifies which Guest Field Select bits to enable as a 6-digit binary string. For each bit, 0 denotes off, and 1 denotes on. | — |
+| `-s, --guest_svn $GSVN` | option specifies the guest SVN to mix into the key. | — |
+| `-t, --tcb_version $TCBV` | option specifies the TCB version to mix into the derived key. | — |
 
-- `$ROOT_KEY_SELECT` : is the root key from which to derive the key (either "vcek" or "vmrk").
+**Guest Field Select**
 
-Options
+| Bit      | Description  |
+| :--      | :--          |
+| 0 (LSB)  | Guest Policy |
+| 1        | Image ID     |
+| 2        | Family ID    |
+| 3        | Measurement  |
+| 4        | SVN          |
+| 5 (MSB)  | TCB Version  |
 
-- `--guest_field_select` : option specifies which Guest Field Select bits to enable as a 6-digit binary string. For each bit, 0 denotes off, and 1 denotes on. 
+For example, `--guest_field_select 110001` denotes 
+```
+Guest Policy:On (1), 
+Image ID:Off (0), 
+Family ID: Off (0), 
+Measurement: Off (0), 
+SVN:On (1), 
+TCB Version:On (1). 
+```
 
-      For example, `--guest_field_select 100001` denotes 
-
-      Guest Policy:On (1), 
-
-      Image ID:Off (0), 
-
-      Family ID:Off (0), 
-
-      Measurement:Off (0), 
-
-      SVN:Off (0), 
-
-      TCB Version:On (1). 
-
-- `--guest_svn` : option specifies the guest SVN to mix into the key,
-
-- `--tcb_version` : option specifies the TCB version to mix into the derived key. 
-
-- `--vmpl` : option specifies the VMPL level the Guest is running on and defaults to 1.
-
-Example
+**Example**
 ```bash
 # Creating and storing a derived key
-snpguest key derived-key.bin vcek --guest_field_select 100001 --guest_svn 2 --tcb_version 1 --vmpl 3
+snpguest key derived-key.bin vcek --guest_field_select 110001 --guest_svn 2 --tcb_version 1 --vmpl 3
 ```
 
 ### 6. `report` 
 
-Requests an attestation report from the host and writes it to a file with the provided request data and VMPL. The attestation report is written in binary format to the specified report path. The user can pass 64 bytes of data in any file format into `$REQUEST_FILE` to request the attestation report. The `--random` flag can be used to generate and use random data for the request, and for Microsoft Hyper-V guests, the `--platform` flag is required to use pre-generated request data. The data already generated from the hypervisor will be written into the file provided in `$REQUEST_FILE`. `VMPL` is an optional parameter that defaults to 1. `--random` is not available in Hyper-V, as the request data is pre-generated.
+Requests an attestation report from the host and writes it to a file with the provided request data and VMPL. The attestation report is written in binary format to the specified report path. The user can pass 64 bytes of data in any file format into `$REQUEST_FILE` to request the attestation report. This data will be bound to the REPORT_DATA field of the attestation report. The `--random` flag can be used to generate and use random data for the request, which will be written into `$REQUEST_FILE`. For Microsoft Azure Confidential VM, the `--platform` flag is required to get an attestation report from the vTPM. With this flag, the request data provided by the hypervisor will be written into the `$REQUEST_FILE`. `VMPL` is an optional parameter that defaults to 1.
 
-Usage
+**Usage**
 ```bash
 snpguest report $ATT_REPORT_PATH $REQUEST_FILE [-v, --vmpl] [-r, --random] [-p, --platform]
 ```
 
-Arguments
+**Arguments**
+| Argument | Description | Default |
+| :--      | :--        | :--    |
+| `$ATT_REPORT_PATH` | Specifies the path where the attestation report would be stored. | required |
+| `$REQUEST_FILE` | Specifies the path to the 64-byte request file. <br>• With `-r` flag, 64 random bytes will be written. <br>• With `-p` flag, writes 64 bytes provided by the hypervisor will be written. <br>• Without flags, the existing file contents are read as-is. | required |
+| `-v, --vmpl $VMPL` | option specifies the VMPL level the Guest is running on.| 1 |
+| `-r, --random` | Generate 64 random bytes of data for the report request. | false |
+| `-p, --platform` | Fetch an attestation report from the vTPM NV index (Only available for Azure CVMs). | false |
 
-- `$ATT_REPORT_PATH` : Specifies the path where the attestation report would be stored.
-
-- `$REQUEST_FILE`: Specifies the path to the 64-byte request file.
-  - With `--random`: writes 64 random bytes
-  - With `--platform`: writes platform provided 64 bytes
-  - Without flags: reads the existing file contents as-is
-
-Options
-
-- `-r, --random`: Generate 64 random bytes of data for the report request (Not available for in Hyper-V).
-- `-p, --platform` : Use platform provided 64 bytes of data for the request report (Only available for Hyper-V).
-- `-v, --vmpl` : option specifies the VMPL level the Guest is running on and defaults to 1.
-
-Example
+**Example**
 ```bash
 # Requesting Attestation Report with user-generated data
-snpguest report attestation-report.bin request-file.txt
+snpguest report attestation-report.bin request-file.bin
 # Requesting Attestation Report using random data
-snpguest report attestation-report.bin random-request-file.txt --random
-# Requesting Attestation Report using platform data
-snpguest report attestation-report.bin platform-request-file.txt --platform
+snpguest report attestation-report.bin random-request-file.bin --random
+# Get Pregenerated Attestation Report and Request Data from vTPM
+snpguest report attestation-report.bin platform-request-file.bin --platform
 ```
 
 ### 7. `verify` 
 
 Verifies certificates and the attestation report.
 
-Usage
+**Usage**
 ```bash
 snpguest verify <SUBCOMMAND>
 ```
 
-Subcommands
+**Subcommands**
 1. `certs`
 
-    Verifies that the provided certificate chain has been properly signed by each certificate. The user needs to provide a directory where all three certificates (ARK, ASK, and VCEK) are stored. An error will be raised if any of the certificates fail verification.
+    Verifies that the provided certificate chain has been properly signed by each certificate. The user needs to provide a directory where all three certificates (ARK, ASK/ASVK and VCEK/VLEK) are stored. An error will be raised if any of the certificates fail verification.
 
-    Usage
+    **Usage**
     ```bash
     snpguest verify certs $CERTS_DIR
     ```
-    Argument
+    **Argument**
 
     - `$CERTS_DIR` : Specifies the directory where the certificates are stored in. 
 
-    Example
+    **Example**
     ```bash
     snpguest verify certs ./certs
     ```
 
 2. `attestation`
 
-    Verifies the contents of the Attestation Report using the VCEK certificate. The user needs to provide the path to the directory containing the VCEK certificate and the path to a stored attestation report to be verified. An error will be raised if the attestation verification fails at any point. The user can use the `-t, --tcb` flag to only validate the TCB contents of the report and the `-s, --signature` flag to only validate the report's signature.
+    Verifies the contents of the Attestation Report using the VCEK/VLEK certificate. The user needs to provide the path to the directory containing the VCEK/VLEK certificate and the path to a stored attestation report to be verified. An error will be raised if the attestation verification fails at any point. The user can use the `-t, --tcb` flag to only validate the TCB contents of the report and the `-s, --signature` flag to only validate the report's signature.
 
-    Usage
+    **Usage**
     ```bash
     snpguest verify attestation $CERTS_DIR $ATT_REPORT_PATH [-t, --tcb] [-s, --signature]
     ```
-    Arguments
+    **Arguments**
 
     - `$CERTS_DIR` : Specifies the directory where the certificates are stored in. 
 
     - `$ATT_REPORT_PATH` : Specifies the path of the stored attestation report.
 
-    Options
+    **Options**
 
-    - `-t, --tcb`: Verify the TCB section of the report only.
+    - `-t, --tcb`: Verify the Reported TCB section of the report only.
     - `-s, --signature`: Verify the signature of the report only.
 
-    Example
+    **Example**
     ```bash
     # Verify Attestation
     snpguest verify attestation ./certs attestation-report.bin
+    # Verify Attestation Reported TCB only
+    snpguest verify attestation ./certs attestation-report.bin --tcb
     # Verify Attestation Signature only
     snpguest verify attestation ./certs attestation-report.bin --signature
     ```
 
 ### [Extended Attestation Workflow](#extended-attestation-flowchart)
 
-**Step 1.** Request the attestation report by providing the two mandatory parameters - $ATT_REPORT_PATH which is the path pointing to where the user wishes to store the attestation report and $REQUEST_FILE which is the path pointing to where the request file used to request the attestation report is stored. The optional parameters [-v, --vmpl] specifies the vmpl level for the attestation report and is set to 1 by default. [-r, --random] generates random data to be used as request data for the attestation report. Lastly, [-p, --platform] obtains the request data from the platform. Microsoft Hyper-V is mandatory when the user is expecting the platform to provide the request data for the attestaion report.
+**Step 1.** Request the attestation report by providing the two mandatory parameters - `$ATT_REPORT_PATH` which is the path pointing to where the user wishes to store the attestation report and `$REQUEST_FILE` which is the path pointing to where the request file used to request the attestation report is stored. The optional parameter \[`-v, --vmpl`\] specifies the vmpl level for the attestation report and is set to 1 by default. The flag \[`-r, --random`\] generates random data to be used as request data for the attestation report. Lastly, the flag \[`-p, --platform`\] obtains both the attestation report and the request data from the platform (only available for a Microsoft Azure CVM where Hyper-V guest is enabled).
 
 ```bash
 snpguest report $ATT_REPORT_PATH $REQUEST_FILE [-v, --vmpl] [-r, --random] [-p, --platform]
 ```
 
-**Step 2.** Request certificates from the extended memory by providing the two mandatory parameters - $ENCODING whichspecifies whether to use PEM or DER encoding to store the certificates and $CERTS_DIR which specifies the path in the user's directory where the certificates will be saved.
+**Step 2.** Request certificates from the extended memory by providing the two mandatory parameters - `$ENCODING` which specifies whether to use PEM or DER encoding to store the certificates and $CERTS_DIR which specifies the path in the user's directory where the certificates will be saved.
 
 ```bash
 snpguest certificates $ENCODING $CERTS_DIR
 ```
 
-**Step 3.** Verify the certificates obtained from the extended memory by providing $CERTS_DIR which specifies the path in the user's directory where the certificates were saved from Step 2.
+In some environments, only the VCEK/VLEK certificate can be obtained. In this case, you must follow the procedure described in [Regular Attestation Workflow](#regular-attestation-workflow) to obtain an AMD CA certificates.
+
+**Step 3.** Verify the certificates obtained from the extended memory by providing `$CERTS_DIR` which specifies the path in the user's directory where the certificates were saved from Step 2.
 
 ```bash
 snpguest verify certs $CERTS_DIR
 ```
 
-**Step 4.** Verify the attestation by providing the two mandatory parameters - $CERTS_DIR which specifies the path in the user's directory where the certificates were saved from Step 2 and $ATT_REPORT_PATH which is the path pointing to the stored attestation report which the user wishes to verify. The optional parameters [-t, --tcb] is used to verify just the TCB contents of the attestaion report and [-s, --signature] is used to verify just the signature of the attestaion report.
+**Step 4.** Verify the attestation by providing the two mandatory parameters - `$CERTS_DIR` which specifies the path in the user's directory where the certificates were saved from Step 2 and `$ATT_REPORT_PATH` which is the path pointing to the stored attestation report which the user wishes to verify. The optional parameters \[`-t, --tcb`\] is used to verify just the Reported TCB contents of the attestaion report and \[`-s, --signature`\] is used to verify just the signature of the attestaion report.
 
 ```bash
 snpguest verify attestation $CERTS_DIR $ATT_REPORT_PATH [-t, --tcb] [-s, --signature]
@@ -313,40 +321,35 @@ snpguest verify attestation $CERTS_DIR $ATT_REPORT_PATH [-t, --tcb] [-s, --signa
 
 ### [Regular Attestation Workflow](#regular-attestation-flowchart)
 
-**Step 1.** Request the attestation report by providing the two mandatory parameters - $ATT_REPORT_PATH which is the path pointing to where the user wishes to store the attestation report and $REQUEST_FILE which is the path pointing to where the request file used to request the attestation report is stored. The optional parameters [-v, --vmpl] specifies the vmpl level for the attestation report and is set to 1 by default. [-r, --random] generates random data to be used as request data for the attestation report. Lastly, [-p, --platform] obtains the request data from the platform. Microsoft Hyper-V is mandatory when the user is expecting the platform to provide the request data for the attestation report.
+**Step 1.** Request the attestation report by providing the two mandatory parameters - `$ATT_REPORT_PATH` which is the path pointing to where the user wishes to store the attestation report and `$REQUEST_FILE` which is the path pointing to where the request file used to request the attestation report is stored. The optional parameter \[`-v, --vmpl`\] specifies the vmpl level for the attestation report and is set to 1 by default. The flag \[`-r, --random`\] generates random data to be used as request data for the attestation report. Lastly, the flag \[`-p, --platform`\] obtains both the attestation report and the request data from the platform (only available for a Microsoft Azure CVM where Hyper-V guest is enabled).
 
 ```bash
 snpguest report $ATT_REPORT_PATH $REQUEST_FILE [-v, --vmpl] [-r, --random] [-p, --platform]
 ```
 
-**Step 2.** Request AMD Root Key (ARK) and AMD SEV Key (ASK) from the AMD Key Distribution Service (KDS) by providing the three mandatory parameters - $ENCODING which specifies whether to use PEM or DER encoding to store the certificates, $PROCESSOR_MODEL - which specifies the AMD Processor model for which the certificates are to be fetched and $CERTS_DIR which specifies the path in the user's directory where the certificates will be saved. The `-e, --endorser` argument specifies the type of attestation signing key (defaults to VCEK).
+**Step 2.** Request AMD Root Key (ARK) and AMD SEV Key (ASK) (or AMD SEV-VLEK Key (ASVK) for VLEK) from the AMD Key Distribution Service (KDS) by providing the three mandatory parameters - `$ENCODING` which specifies whether to use PEM or DER encoding to store the certificates, `$CERTS_DIR` which specifies the path in the user's directory where the certificates will be saved, and `$PROCESSOR_MODEL` - which specifies the AMD Processor model for which the certificates are to be fetched. The optional `-e, --endorser` argument specifies the type of attestation signing key (defaults to VCEK).
 
 ```bash
-snpguest fetch ca $ENCODING $PROCESSOR_MODEL $CERTS_DIR [-e, --endorser] $ENDORSER
+snpguest fetch ca $ENCODING $CERTS_DIR $PROCESSOR_MODEL [-e, --endorser] $ENDORSER
 ```
 
-**Step 3.** Request the Versioned Chip Endorsement Key (VCEK) from the AMD Key Distribution Service (KDS) by providing the three mandatory parameters - $ENCODING whichspecifies whether to use PEM or DER encoding to store the certificates, $PROCESSOR_MODEL - which specifies the AMD Processor model for which the certificates are to be fetched and $CERTS_DIR which specifies the path in the user's directory where the certificates will be saved.
-
+**Step 3.** Request the Versioned Chip Endorsement Key (VCEK) from the AMD Key Distribution Service (KDS) by providing the three mandatory parameters - `$ENCODING` which specifies whether to use PEM or DER encoding to store the certificates, `$CERTS_DIR` which specifies the path in the user's directory where the certificates will be saved, and `$ATT_REPORT_PATH` which is the path pointing to the stored attestation report for detecting Chip ID and Reported TCB Version. The optional \[`-p, --processor-model`\] argument specifies the AMD Processor model for which the certificates are to be fetched.
 
 ```bash
-snpguest fetch vcek $ENCODING $PROCESSOR_MODEL $CERTS_DIR $ATT_REPORT_PATH
+snpguest fetch vcek $ENCODING $CERTS_DIR $ATT_REPORT_PATH [-p, --processor-model] $PROCESSOR_MODEL
 ```
 
-**Step 4.** Verify the certificates obtained by providing $CERTS_DIR which specifies the path in the user's directory where the certificates were saved from Step 2.
+**Step 4.** Verify the certificates obtained by providing `$CERTS_DIR` which specifies the path in the user's directory where the certificates were saved from Step 2.
 
 ```bash
 snpguest verify certs $CERTS_DIR
 ```
 
-**Step 5.** Verify the attestation by providing the two mandatory parameters - $CERTS_DIR which specifies the path in the user's directory where the certificates were saved from Step 2 and $ATT_REPORT_PATH which is the path pointing to the stored attestation report which the user wishes to verify. The optional parameters [-t, --tcb] is used to verify just the TCB contents of the attestaion report and [-s, --signature] is used to verify just the signature of the attestaion report.
+**Step 5.** Verify the attestation by providing the two mandatory parameters - `$CERTS_DIR` which specifies the path in the user's directory where the certificates were saved from Step 2 and `$ATT_REPORT_PATH` which is the path pointing to the stored attestation report which the user wishes to verify. The optional parameters \[`-t, --tcb`\] is used to verify just the Reported TCB contents of the attestaion report and \[`-s, --signature`\] is used to verify just the signature of the attestaion report.
 
 ```bash
 snpguest verify attestation $CERTS_DIR $ATT_REPORT_PATH [-t, --tcb] [-s, --signature]
 ```
-
-### Global Options
-
-- **-q, --quiet**: Suppress console output.
 
 ## Extended Attestation Flowchart
 ![alt text](https://github.com/virtee/snpguest/blob/main/docs/extended.PNG?raw=true)
@@ -384,10 +387,10 @@ sudo zypper in -t pattern "devel_basis"
 ```
 
 ### Building for Azure Confidential VMs
-On Azure CVMs with AMD SEV-SNP, the paravisor fetches the report from AMD-SP once at VM boot time, and stores it in the vTPM NV index. The native `/dev/sev-guest` interface is hidden from the guest OS, so the guest OS must retrieve the report using the `--platform` flag, which is available only in builds compiled with the `hyperv` feature.
+On Azure CVMs with AMD SEV-SNP, the paravisor fetches the report from AMD-SP once at VM boot time, and stores it in the vTPM NV index. The native `/dev/sev-guest` interface is hidden from the guest OS, so the guest OS must retrieve the report from the vTPM NV index using the `--platform` flag, which is available only in builds compiled with the `hyperv` feature.
 
 ```bash
-git clone https://github.com/virtee/snpguest.git
+git clone https://github.com/virtee/snpguest
 cd ./snpguest
 cargo build -r --features hyperv
 ```
