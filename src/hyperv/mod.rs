@@ -98,7 +98,7 @@ pub mod report {
 
     pub fn get(vmpl: u32) -> Result<AttestationReport> {
         if vmpl > 0 {
-            return Err(anyhow!("Azure vTPM attestation report requires VMPL 0"));
+            eprintln!("Warning: --vmpl argument was ignored because attestation report is pre-fetched at VMPL 0 and stored in vTPM.");
         }
         let bytes = tpm2_read().context("unable to read attestation report bytes from vTPM")?;
 
