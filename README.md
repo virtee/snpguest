@@ -10,6 +10,7 @@
   - [5. key](#5-key)
   - [6. report](#6-report)
   - [7. verify](#7-verify)
+  - [Global Options](#global-options)
 - [Extended Attestation Workflow](#extended-attestation-workflow)
 - [Regular Attestation Workflow](#regular-attestation-workflow)
 - [Extended Attestation Flowchart](#extended-attestation-flowchart)
@@ -290,6 +291,15 @@ snpguest verify <SUBCOMMAND>
     # Verify Attestation Signature only
     snpguest verify attestation ./certs attestation-report.bin --signature
     ```
+
+### Global Options
+
+- **-q, --quiet**: Suppress console output.
+
+**Usage**
+```bash
+snpguest -q <SUBCOMMAND>
+```
 
 ### [Extended Attestation Workflow](#extended-attestation-flowchart)
 
