@@ -32,6 +32,10 @@ pub struct KeyArgs {
     /// Specify the TCB version to mix into the derived key. Must not exceed CommittedTcb.
     #[arg(short, long = "tcb_version")]
     pub tcbv: Option<u64>,
+
+    /// Specify the launch mitigation vector to mix into the derived key.
+    #[arg(short, long = "launch_mit_vector")]
+    pub lmv: Option<u64>,
 }
 
 pub fn get_derived_key(args: KeyArgs) -> Result<()> {
@@ -68,7 +72,14 @@ pub fn get_derived_key(args: KeyArgs) -> Result<()> {
 
     let tcbv: u64 = args.tcbv.unwrap_or(0);
 
-    let request = DerivedKey::new(root_key_select, GuestFieldSelect(gfs), vmpl, gsvn, tcbv);
+    let request = DerivedKey::new(
+        root_key_select,
+        GuestFieldSelect(gfs),
+        vmpl,
+        gsvn,
+        tcbv,
+        args.lmv,
+    );
     let mut sev_fw = Firmware::open().context("failed to open SEV firmware device.")?;
     let derived_key: [u8; 32] = sev_fw
         .get_derived_key(None, request)

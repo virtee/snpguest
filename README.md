@@ -163,7 +163,7 @@ snpguest fetch <SUBCOMMAND>
 
 ### 5. `key` 
 
-Creates the derived key based on input parameters and stores it. `$KEY_PATH` is the path to store the derived key. `$ROOT_KEY_SELECT` is the root key from which to derive the key (either "vcek" or "vmrk"). The `--guest_field_select` option specifies which Guest Field Select bits to enable as a 6-digit binary string. Each of the 6 bits from *right to left* correspond to Guest Policy, Image ID, Family ID, Measurement, SVN and TCB Version respectively. For each bit, 0 denotes off, and 1 denotes on. The `--guest_svn` option specifies the guest SVN to mix into the key, and the `--tcb_version` option specifies the TCB version to mix into the derived key. The `--vmpl` option specifies the VMPL level the Guest is running on and defaults to 1.
+Creates the derived key based on input parameters and stores it. `$KEY_PATH` is the path to store the derived key. `$ROOT_KEY_SELECT` is the root key from which to derive the key (either "vcek" or "vmrk"). The `--guest_field_select` option specifies which Guest Field Select bits to enable as a 6-digit binary string. Each of the 6 bits from *right to left* correspond to Guest Policy, Image ID, Family ID, Measurement, SVN and TCB Version respectively. For each bit, 0 denotes off, and 1 denotes on. The `--guest_svn` option specifies the guest SVN to mix into the key, the `--tcb_version` option specifies the TCB version to mix into the derived key, and the `--launch_mit_vector` option specifies the launch mitigation vector value to mix into the derived key. The `--vmpl` option specifies the VMPL level the Guest is running on and defaults to 1.
 
 
 **Usage**
@@ -180,6 +180,7 @@ snpguest key $KEY_PATH $ROOT_KEY_SELECT [-v, --vmpl] [-g, --guest_field_select] 
 | `-g, --guest_field_select $GFS` | option specifies which Guest Field Select bits to enable as a 6-digit binary string. For each bit, 0 denotes off, and 1 denotes on. | — |
 | `-s, --guest_svn $GSVN` | option specifies the guest SVN to mix into the key. | — |
 | `-t, --tcb_version $TCBV` | option specifies the TCB version to mix into the derived key. | — |
+| `-l, --launch_mit_vector $LMV` | option specifies the launch mitigation vector value to mix into the derived key (only available for report version 5). | — |
 
 **Guest Field Select**
 
