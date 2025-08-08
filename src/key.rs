@@ -20,9 +20,9 @@ pub struct KeyArgs {
     #[arg(short, long, value_name = "vmpl", default_value = "1")]
     pub vmpl: Option<u32>,
 
-    /// Specify which Guest Field Select bits to enable. It is a 6 digit binary string. For each bit, 0 denotes off and 1 denotes on.
-    /// The least significant (rightmost) bit is Guest Policy followed by Image ID, Family ID, Measurement, SVN, TCB Version which is the most significant (leftmost) bit.
-    #[arg(short, long = "guest_field_select", value_name = "######")]
+    /// Specify which Guest Field Select bits to enable. It is a 6 or 7 digit binary string. For each bit, 0 denotes off and 1 denotes on.
+    /// The least significant (rightmost) bit is Guest Policy followed by Image ID, Family ID, Measurement, SVN, TCB Version, and Launch Mitigation Vector which is the most significant (leftmost) bit.
+    #[arg(short, long = "guest_field_select", value_name = "#######")]
     pub gfs: Option<String>,
 
     /// Specify the guest SVN to mix into the key. Must not exceed the guest SVN provided at launch in the ID block.
@@ -32,6 +32,10 @@ pub struct KeyArgs {
     /// Specify the TCB version to mix into the derived key. Must not exceed CommittedTcb.
     #[arg(short, long = "tcb_version")]
     pub tcbv: Option<u64>,
+
+    /// Specify the launch mitigation vector to mix into the derived key.
+    #[arg(short, long = "launch_mit_vector")]
+    pub lmv: Option<u64>,
 }
 
 pub fn get_derived_key(args: KeyArgs) -> Result<()> {
@@ -54,12 +58,18 @@ pub fn get_derived_key(args: KeyArgs) -> Result<()> {
 
     let gfs = match args.gfs {
         Some(gfs) => {
-            let value: u64 = u64::from_str_radix(gfs.as_str(), 2).unwrap();
-            if value <= 63 {
-                value
-            } else {
-                return Err(anyhow::anyhow!("Invalid Guest Field Select option."));
+            if gfs.len() != 6 && gfs.len() != 7 {
+                return Err(anyhow::anyhow!(
+                    "Invalid Guest Field Select option. Must be 6 or 7 digits."
+                ));
             }
+            if gfs.chars().any(|c| c != '0' && c != '1') {
+                return Err(anyhow::anyhow!(
+                    "Invalid Guest Field Select option. Must be a binary string."
+                ));
+            }
+            let value: u64 = u64::from_str_radix(gfs.as_str(), 2).unwrap();
+            value
         }
         None => 0,
     };
@@ -68,10 +78,20 @@ pub fn get_derived_key(args: KeyArgs) -> Result<()> {
 
     let tcbv: u64 = args.tcbv.unwrap_or(0);
 
-    let request = DerivedKey::new(root_key_select, GuestFieldSelect(gfs), vmpl, gsvn, tcbv);
+    let request = DerivedKey::new(
+        root_key_select,
+        GuestFieldSelect(gfs),
+        vmpl,
+        gsvn,
+        tcbv,
+        args.lmv,
+    );
+
+    let msg_ver = if args.lmv.is_some() { 2 } else { 1 };
+
     let mut sev_fw = Firmware::open().context("failed to open SEV firmware device.")?;
     let derived_key: [u8; 32] = sev_fw
-        .get_derived_key(None, request)
+        .get_derived_key(Some(msg_ver), request)
         .context("Failed to request derived key")?;
 
     // Create derived key path
