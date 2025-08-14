@@ -16,6 +16,8 @@ use openssl::{ecdsa::EcdsaSig, sha::Sha384};
 use sev::certs::snp::Chain;
 use sev::parser::ByteParser;
 
+use hex::FromHex;
+
 #[derive(Subcommand)]
 pub enum VerifyCmd {
     /// Verify the certificate chain.
@@ -201,6 +203,18 @@ mod attestation {
         /// Run the Signature Verification Exclusively.
         #[arg(short, long, conflicts_with = "tcb")]
         pub signature: bool,
+
+        /// Optional measurement string (hex, 48 bytes / 96 chars)
+        #[arg(short, long, value_name = "measurement")]
+        pub measurement: Option<String>,
+
+        /// Optional host_data string (hex, 32 bytes / 64 chars)
+        #[arg(short = 'd', long, value_name = "host_data")]
+        pub host_data: Option<String>,
+
+        /// Optional report_data string (hex, 64 bytes / 128 chars)
+        #[arg(short, long, value_name = "report_data")]
+        pub report_data: Option<String>,
     }
 
     fn verify_attestation_signature(
@@ -418,7 +432,7 @@ mod attestation {
                 .context("Could not open attestation report")?
         };
 
-        let proc_model = if let Some(proc_model) = args.processor_model {
+        let proc_model = if let Some(proc_model) = args.processor_model.clone() {
             proc_model
         } else {
             let att_report = report::read_report(args.att_report_path.clone())
@@ -445,6 +459,90 @@ mod attestation {
         } else {
             verify_attestation_tcb(vek.clone(), att_report, proc_model, quiet)?;
             verify_attestation_signature(vek, att_report, quiet)?;
+        }
+
+        // Verify optional fields if provided
+        if args.measurement.is_some() || args.host_data.is_some() || args.report_data.is_some() {
+            verify_report_fields(&args, &att_report, quiet)?;
+        }
+
+        Ok(())
+    }
+
+    fn decode_hex_or_decimal(input: &str) -> Result<Vec<u8>> {
+        // Look for "0x" at beginning. If it exists, treat as a hex.
+        if let Some(hex_str) = input.strip_prefix("0x") {
+            return Ok(Vec::from_hex(hex_str)?);
+        }
+        else {
+            Ok(input.as_bytes().to_vec())
+        }
+    }
+    
+    fn verify_field(
+        field_name: &str,
+        expected: &[u8],
+        provided: &str,
+        expected_len: usize,
+        quiet: bool,
+    ) -> Result<()> {
+        let actual = decode_hex_or_decimal(provided)?;
+
+        if actual.len() != expected_len {
+            return Err(anyhow::anyhow!(
+                "Expected {} characters for {}, got {}",
+                expected_len,
+                field_name,
+                actual.len()
+            ));
+        }
+
+        if expected != actual.as_slice() {
+            return Err(anyhow::anyhow!(
+                "{} did not match:\n expected {}\n got {}",
+                field_name,
+                hex::encode(expected),
+                hex::encode(actual)
+            ));
+        }
+        if !quiet {
+            println!("{} verified successfully.", field_name);
+        }
+
+        Ok(())
+    }
+
+    fn verify_report_fields(
+        args: &Args,
+        att_report: &AttestationReport,
+        quiet: bool,
+    ) -> Result<()> {
+        if let Some(measure) = &args.measurement {
+            verify_field(
+                "Measurement",
+                att_report.measurement.as_slice(),
+                measure,
+                48,
+                quiet,
+            )?;
+        }
+        if let Some(host) = &args.host_data {
+            verify_field(
+                "Host Data",
+                att_report.host_data.as_slice(),
+                host,
+                32,
+                quiet,
+            )?;
+        }
+        if let Some(report) = &args.report_data {
+            verify_field(
+                "Report Data",
+                att_report.report_data.as_slice(),
+                report,
+                64,
+                quiet,
+            )?;
         }
 
         Ok(())
