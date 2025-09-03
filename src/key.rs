@@ -18,77 +18,55 @@ pub struct KeyArgs {
 
     /// Specify an integer VMPL level between 0 and 3 that the Guest is running on.
     #[arg(short, long, value_name = "vmpl", default_value = "1")]
-    pub vmpl: Option<u32>,
+    pub vmpl: u32,
 
-    /// Specify which Guest Field Select bits to enable. It is a 6 or 7 digit binary string. For each bit, 0 denotes off and 1 denotes on.
-    /// The least significant (rightmost) bit is Guest Policy followed by Image ID, Family ID, Measurement, SVN, TCB Version, and Launch Mitigation Vector which is the most significant (leftmost) bit.
-    #[arg(short, long = "guest_field_select", value_name = "#######")]
-    pub gfs: Option<String>,
+    /// Specify which Guest Field Select bits to enable. It is 64-bit wide but only the least-significant 6 bits (Message Version 1) or 7 bits (Message Version 2) are currently defined; all higher bits must be zero. The bits (LSB->MSB) are: 0 = Guest Policy, 1 = Image ID, 2 = Family ID, 3 = Measurement, 4 = SVN, 5 = TCB Version, 6 = Launch Mitigation Vector (only available for Message Version 2). Accepts an integer in decimal (e.g. `63`), prefixed hex (e.g. `0x3f`) or prefixed bin (e.g. `0b111111`).
+    #[arg(short, long = "guest_field_select", value_name = "gfs", value_parser = clparser::parse_int_auto_radix::<u64>, default_value = "0")]
+    pub gfs: u64,
 
-    /// Specify the guest SVN to mix into the key. Must not exceed the guest SVN provided at launch in the ID block.
-    #[arg(short = 's', long = "guest_svn")]
-    pub gsvn: Option<u32>,
+    /// Specify the guest SVN to mix into the key. Must not exceed the guest SVN provided at launch in the ID block. Accepts an integer in decimal, prefixed hex or prefixed bin.
+    #[arg(short = 's', long = "guest_svn", value_name = "gsvn", value_parser = clparser::parse_int_auto_radix::<u32>, default_value = "0")]
+    pub gsvn: u32,
 
-    /// Specify the TCB version to mix into the derived key. Must not exceed CommittedTcb.
-    #[arg(short, long = "tcb_version")]
-    pub tcbv: Option<u64>,
+    /// Specify the TCB version to mix into the derived key. Must not exceed CommittedTcb. Accepts an integer in decimal, prefixed hex or prefixed bin.
+    #[arg(short, long = "tcb_version", value_name = "tcbv", value_parser = clparser::parse_int_auto_radix::<u64>, default_value = "0")]
+    pub tcbv: u64,
 
-    /// Specify the launch mitigation vector to mix into the derived key.
-    #[arg(short, long = "launch_mit_vector")]
+    /// Specify the launch mitigation vector to mix into the derived key (only available for Message Version 2). Accepts an integer in decimal, hexadecimal or binary string.
+    #[arg(short, long = "launch_mit_vector", value_name = "lmv", value_parser = clparser::parse_int_auto_radix::<u64>)]
     pub lmv: Option<u64>,
 }
 
 pub fn get_derived_key(args: KeyArgs) -> Result<()> {
+    // Validate arguments
     let root_key_select = match args.root_key_select.as_str() {
         "vcek" => false,
         "vmrk" => true,
         _ => return Err(anyhow::anyhow!("Invalid input. Enter either vcek or vmrk")),
     };
 
-    let vmpl = match args.vmpl {
-        Some(level) => {
-            if level <= 3 {
-                level
-            } else {
-                return Err(anyhow::anyhow!("Invalid Virtual Machine Privilege Level."));
-            }
-        }
-        None => 1,
-    };
+    if args.vmpl > 3 {
+        return Err(anyhow::anyhow!(
+            "Invalid Virtual Machine Privilege Level. Must betwee"
+        ));
+    }
 
-    let gfs = match args.gfs {
-        Some(gfs) => {
-            if gfs.len() != 6 && gfs.len() != 7 {
-                return Err(anyhow::anyhow!(
-                    "Invalid Guest Field Select option. Must be 6 or 7 digits."
-                ));
-            }
-            if gfs.chars().any(|c| c != '0' && c != '1') {
-                return Err(anyhow::anyhow!(
-                    "Invalid Guest Field Select option. Must be a binary string."
-                ));
-            }
-            let value: u64 = u64::from_str_radix(gfs.as_str(), 2).unwrap();
-            value
-        }
-        None => 0,
-    };
+    if args.gfs > 0b1111111 {
+        return Err(anyhow::anyhow!("Invalid Guest Field Select option."));
+    }
 
-    let gsvn: u32 = args.gsvn.unwrap_or(0);
-
-    let tcbv: u64 = args.tcbv.unwrap_or(0);
-
-    let request = DerivedKey::new(
-        root_key_select,
-        GuestFieldSelect(gfs),
-        vmpl,
-        gsvn,
-        tcbv,
-        args.lmv,
-    );
-
+    // Switch message version of MSG_KEY_REQ
     let msg_ver = if args.lmv.is_some() { 2 } else { 1 };
 
+    // Request derived key
+    let request = DerivedKey::new(
+        root_key_select,
+        GuestFieldSelect(args.gfs),
+        args.vmpl,
+        args.gsvn,
+        args.tcbv,
+        args.lmv,
+    );
     let mut sev_fw = Firmware::open().context("failed to open SEV firmware device.")?;
     let derived_key: [u8; 32] = sev_fw
         .get_derived_key(Some(msg_ver), request)

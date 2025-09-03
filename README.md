@@ -131,7 +131,7 @@ snpguest fetch <SUBCOMMAND>
     | `-r, --report $ATT_REPORT_PATH` | Specifies the attestation report to detect the host processor model (conflict with `$PROCESSOR_MODEL`) | — |
     | `-e, --endorser $ENDORSER` | Specifies the endorser type, possible values: "vcek", "vlek". | "vcek" |
 
-    Example
+    **Example**
     ```bash
     snpguest fetch ca der ./certs-kds milan -e vlek
     ```
@@ -163,7 +163,7 @@ snpguest fetch <SUBCOMMAND>
 
 ### 5. `key` 
 
-Creates the derived key based on input parameters and stores it. `$KEY_PATH` is the path to store the derived key. `$ROOT_KEY_SELECT` is the root key from which to derive the key (either "vcek" or "vmrk"). The `--guest_field_select` option specifies which Guest Field Select bits to enable as a binary string of length 6 or 7. Each of the bits from *right to left* correspond to Guest Policy, Image ID, Family ID, Measurement, SVN and TCB Version, Launch Mitigation Vector, respectively. For each bit, 0 denotes off, and 1 denotes on. The `--guest_svn` option specifies the guest SVN to mix into the key, the `--tcb_version` option specifies the TCB version to mix into the derived key, and the `--launch_mit_vector` option specifies the launch mitigation vector value to mix into the derived key. The `--vmpl` option specifies the VMPL level the Guest is running on and defaults to 1.
+Creates the derived key based on input parameters and stores it. `$KEY_PATH` is the path to store the derived key. `$ROOT_KEY_SELECT` is the root key from which to derive the key (either "vcek" or "vmrk"). The `--guest_field_select` option specifies which Guest Field Select bits to enable as a 64-bit integer. Only the least-significant 6 bits (Message Version 1) or 7 bits (Message Version 2) are currently defined. Each of the bits from *right to left* correspond to Guest Policy, Image ID, Family ID, Measurement, SVN and TCB Version, Launch Mitigation Vector, respectively. For each bit, 0 denotes off, and 1 denotes on. The `--guest_svn` option specifies the guest SVN to mix into the key, the `--tcb_version` option specifies the TCB version to mix into the derived key, and the `--launch_mit_vector` option specifies the launch mitigation vector value to mix into the derived key. The `--vmpl` option specifies the VMPL level the Guest is running on and defaults to 1.
 
 **Usage**
 ```bash
@@ -176,25 +176,30 @@ snpguest key $KEY_PATH $ROOT_KEY_SELECT [-v, --vmpl] [-g, --guest_field_select] 
 | `$KEY_PATH` | The path to store the derived key. | required |
 | `$ROOT_KEY_SELECT` | is the root key from which to derive the key (either "vcek" or "vmrk"). | required |
 | `-v, --vmpl $VMPL` | option specifies the VMPL level the Guest is running on. | 1 |
-| `-g, --guest_field_select $GFS` | option specifies which Guest Field Select bits to enable as a binary string (length 6 or 7). For each bit, 0 denotes off, and 1 denotes on. | all 0s |
-| `-s, --guest_svn $GSVN` | option specifies the guest SVN to mix into the key. | — |
-| `-t, --tcb_version $TCBV` | option specifies the TCB version to mix into the derived key. | — |
-| `-l, --launch_mit_vector $LMV` | option specifies the launch mitigation vector value to mix into the derived key (only available for `MSG_KEY_REQ` version ≥ 2 ). | — |
+| `-g, --guest_field_select $GFS` | option specifies which Guest Field Select bits to enable as a 64-bit integer (decimal, prefixed hex or prefixed bin). | 0 |
+| `-s, --guest_svn $GSVN` | option specifies the guest SVN to mix into the key (decimal, prefixed hex or prefixed bin). | 0 |
+| `-t, --tcb_version $TCBV` | option specifies the TCB version to mix into the derived key (decimal, prefixed hex or prefixed bin). | 0 |
+| `-l, --launch_mit_vector $LMV` | option specifies the launch mitigation vector value to mix into the derived key (decimal, prefixed hex or prefixed bin). Only available for `MSG_KEY_REQ` message version ≥ 2. | — |
 
 **Guest Field Select**
 
 | Bit      | Field             | Note |
 | :--      | :--               | :--  |
-| 0 (LSB)  | Guest Policy      |      |
-| 1        | Image ID          |      |
-| 2        | Family ID         |      |
-| 3        | Measurement       |      |
-| 4        | SVN               |      |
+| 63:7     | (Reserved)        | Currently not supported. |
+| 6 (MSB)  | Launch MIT Vector | Set to 0 if not specified; supported for `MSG_KEY_REQ` message version ≥ 2. |
 | 5        | TCB Version       |      |
-| 6 (MSB)  | Launch MIT Vector | Set to 0 if not specified; supported for `MSG_KEY_REQ` version ≥ 2. |
-| (7–63)   | (Reserved)        | Currently not supported. |
+| 4        | SVN               |      |
+| 3        | Measurement       |      |
+| 2        | Family ID         |      |
+| 1        | Image ID          |      |
+| 0 (LSB)  | Guest Policy      |      |
 
-For example, `--guest_field_select 110001` denotes 
+For example, all of
+- `--guest_field_select 49`
+- `--guest_field_select 0x31`
+- `--guest_field_select 0b110001`
+
+denote the following specification:
 ```
 Guest Policy:On (1), 
 Image ID:Off (0), 
@@ -208,7 +213,7 @@ Launch MIT Vector: Off (none).
 **Example**
 ```bash
 # Creating and storing a derived key
-snpguest key derived-key.bin vcek --guest_field_select 110001 --guest_svn 2 --tcb_version 1 --vmpl 3
+snpguest key derived-key.bin vcek --guest_field_select 0b110001 --guest_svn 2 --tcb_version 1 --vmpl 3
 ```
 
 ### 6. `report` 
