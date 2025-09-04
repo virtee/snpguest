@@ -167,7 +167,7 @@ mod attestation {
 
     // OID extensions for the VCEK, will be used to verify attestation report
     impl SnpOid {
-        fn oid(&self) -> Oid {
+        fn oid(&self) -> Oid<'static> {
             match self {
                 SnpOid::BootLoader => oid!(1.3.6 .1 .4 .1 .3704 .1 .3 .1),
                 SnpOid::Tee => oid!(1.3.6 .1 .4 .1 .3704 .1 .3 .2),
