@@ -1576,7 +1576,6 @@ dependencies = [
  "hex",
  "msru",
  "nix",
- "num-traits",
  "openssl",
  "rand",
  "reqwest",

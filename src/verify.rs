@@ -472,13 +472,12 @@ mod attestation {
     fn decode_hex_or_decimal(input: &str) -> Result<Vec<u8>> {
         // Look for "0x" at beginning. If it exists, treat as a hex.
         if let Some(hex_str) = input.strip_prefix("0x") {
-            return Ok(Vec::from_hex(hex_str)?);
-        }
-        else {
+            Ok(Vec::from_hex(hex_str)?)
+        } else {
             Ok(input.as_bytes().to_vec())
         }
     }
-    
+
     fn verify_field(
         field_name: &str,
         expected: &[u8],
