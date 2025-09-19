@@ -120,12 +120,25 @@ COMMANDS
     An error will be raised if the attestation verification fails at any point.
     The user can use the [-t, --tcb] flag to only validate the tcb contents of the report.
     The user can use the [-s, --signature] flag to only validate the report signature.
+    The user can use the [-m, --measurement] flag to verify that the measurement in the attestation 
+    report matches the expected measurement value (prefix with 0x for hex, without prefix it assumes 
+    decimal values).
+    The user can use the [-d, --host-data] flag to verify that the host-data in the attestation 
+    report matches the expected host-data value (prefix with 0x for hex, without prefix it assumes 
+    decimal values).
+    The user can use the [-r, --report-data] flag to verify that the report-data in the attestation 
+    report matches the expected report-data value (prefix with 0x for hex, without prefix it assumes 
+    decimal values).
+    If the optional flags are not passed, just the signature will be verified.
 
     options:
     -h, --help show a help message
     -p, --processor_model Specify the processor model to use for verification
     -t, --tcb verify the tcb section of the report only
     -s, --signature verify the signature of the report only
+    -m, --measurement provide an expected measurement to verify the measurement field in the attestation report
+    -d, --host-data provide the expected host-data to verify the host-data field in the attestation report
+    -r, --report-data provide the expected report-data to verify the report-data in the attestation report
 
 *snpguest key*::
     usage: snpguest key $KEY_PATH $ROOT_KEY_SELECT [-g, --guest_field_select] [-s, --guest_svn] [-t, --tcb_version] [-v, --vmpl]
