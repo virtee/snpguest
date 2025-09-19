@@ -32,4 +32,4 @@ jobs:
       - uses: actions-rs/cargo@v1
         with:
           command: clippy
-          args: --all-targets -- -D clippy::all -D unused_imports -Dwarnings
+          args: --locked --all-targets -- -D clippy::all -D unused_imports -D warnings
