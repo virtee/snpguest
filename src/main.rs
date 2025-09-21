@@ -10,6 +10,8 @@ mod preattestation;
 mod report;
 mod verify;
 
+mod clparser;
+
 #[cfg(feature = "hyperv")]
 mod hyperv;
 
