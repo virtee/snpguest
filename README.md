@@ -161,6 +161,35 @@ snpguest fetch <SUBCOMMAND>
     snpguest fetch vcek pem ./certs-kds attestation-report.bin
     ```
 
+3. `crl`
+
+    Requests the Certificate Revocation List (CRL) from the KDS. It takes the same set of arguments as `snpguest fetch ca`. The user needs to specify the encoding to store the CRL in (PEM or DER). Currently, only PEM and DER encodings are supported. The user must specify their host processor model. The user also needs to provide the path to the directory where the CRL will be stored. If the CRL already exists in the provided directory, it will be overwritten. The `--endorser` argument specifies the type of attestation signing key (defaults to VCEK).
+
+    **Usage**
+    ```bash
+    # Fetch CRL of the user-provided processor model
+    snpguest fetch crl $ENCODING $CERTS_DIR $PROCESSOR_MODEL --endorser $ENDORSER
+    # Fetch CRL of the processor-model written in the attestation report
+    snpguest fetch crl $ENCODING $CERTS_DIR --report $ATT_REPORT_PATH --endorser $ENDORSER
+    ```
+    
+    **Arguments**
+    | Argument | Description | Default |
+    | :--      | :--        | :--    |
+    | `$ENCODING` | Specifies the encoding to store the CRL in (PEM or DER). | required |
+    | `$CERTS_DIR` | Specifies the directory to store the CRL in. | required |
+    | `$PROCESSOR_MODEL` | Specifies the host processor model (conflict with `--report`). | required |
+    | `-r, --report $ATT_REPORT_PATH` | Specifies the attestation report to detect the host processor model (conflict with `$PROCESSOR_MODEL`) | — |
+    | `-e, --endorser $ENDORSER` | Specifies the endorser type, possible values: "vcek", "vlek". | "vcek" |
+
+    Example
+    ```bash
+    snpguest fetch crl der ./certs-kds milan -e vlek
+    ```
+    ```bash
+    snpguest fetch crl pem ./certs-kds -r attestation-report.bin -e vcek
+    ```
+
 ### 5. `key` 
 
 Creates the derived key based on input parameters and stores it. `$KEY_PATH` is the path to store the derived key. `$ROOT_KEY_SELECT` is the root key from which to derive the key (either "vcek" or "vmrk"). The `--guest_field_select` option specifies which Guest Field Select bits to enable as a binary string of length 6 or 7. Each of the bits from *right to left* correspond to Guest Policy, Image ID, Family ID, Measurement, SVN and TCB Version, Launch Mitigation Vector, respectively. For each bit, 0 denotes off, and 1 denotes on. The `--guest_svn` option specifies the guest SVN to mix into the key, the `--tcb_version` option specifies the TCB version to mix into the derived key, and the `--launch_mit_vector` option specifies the launch mitigation vector value to mix into the derived key. The `--vmpl` option specifies the VMPL level the Guest is running on and defaults to 1.
