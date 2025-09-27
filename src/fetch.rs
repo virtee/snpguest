@@ -23,6 +23,9 @@ pub enum FetchCmd {
 
     /// Fetch the VCEK from the KDS.
     Vcek(vcek::Args),
+
+    /// Fetch the CRL from the KDS.
+    Crl(crl::Args),
 }
 
 #[derive(ValueEnum, Debug, Clone, PartialEq, Eq)]
@@ -152,6 +155,7 @@ pub fn cmd(cmd: FetchCmd) -> Result<()> {
     match cmd {
         FetchCmd::CA(args) => cert_authority::fetch_ca(args),
         FetchCmd::Vcek(args) => vcek::fetch_vcek(args),
+        FetchCmd::Crl(args) => crl::fetch_crl(args),
     }
 }
 
@@ -396,6 +400,122 @@ mod vcek {
         Ok(())
     }
 }
+
+mod crl {
+    use super::*;
+    use pem_rfc7468::{encode_string, LineEnding};
+    use reqwest::StatusCode;
+    use std::io::Write;
+
+    #[derive(Parser)]
+    pub struct Args {
+        /// Specify encoding to use for the CRL.
+        #[arg(value_name = "encoding", required = true, ignore_case = true)]
+        pub encoding: CertFormat,
+
+        /// Directory to store the CRL in.
+        #[arg(value_name = "certs-dir", required = true)]
+        pub certs_dir: PathBuf,
+
+        /// Specify the processor model for the desired CRL.
+        #[arg(
+            value_name = "processor-model",
+            required_unless_present = "att_report",
+            conflicts_with = "att_report",
+            ignore_case = true
+        )]
+        pub processor_model: Option<ProcType>,
+
+        /// Attestation Report to get processor model from (V3 of report needed).
+        #[arg(
+            short = 'r',
+            long = "report",
+            value_name = "att-report",
+            conflicts_with = "processor_model",
+            ignore_case = true
+        )]
+        pub att_report: Option<PathBuf>,
+
+        /// Specify which endorsement CRL to pull, either VCEK or VLEK.
+        #[arg(short, long, value_name = "endorser", default_value_t = Endorsement::Vcek, ignore_case = true)]
+        pub endorser: Endorsement,
+    }
+
+    // Function to build kds request for CRL and return a CRL
+    pub fn request_crl_kds(
+        processor_model: ProcType,
+        endorser: &Endorsement,
+    ) -> Result<Vec<u8>, anyhow::Error> {
+        const KDS_CRL_SITE: &str = "https://kdsintf.amd.com";
+        const KDS_CRL: &str = "crl";
+
+        // Should make -> https://kdsintf.amd.com/vcek/v1/{SEV_PROD_NAME}/crl
+        let url: String = format!(
+            "{KDS_CRL_SITE}/{}/v1/{}/{KDS_CRL}",
+            endorser.to_string().to_lowercase(),
+            processor_model.to_kds_url()
+        );
+
+        // CRL in DER format
+        let crl_rsp: Response = get(url).context("Unable to send request for CRL to URL")?;
+
+        match crl_rsp.status() {
+            StatusCode::OK => {
+                let crl_rsp_bytes: Vec<u8> =
+                    crl_rsp.bytes().context("Unable to parse CRL")?.to_vec();
+                Ok(crl_rsp_bytes)
+            }
+            status => Err(anyhow::anyhow!("Unable to fetch CRL from URL: {status:?}")),
+        }
+    }
+
+    // Fetch the CRL from the kds and write it into the certs directory
+    pub fn fetch_crl(args: Args) -> Result<()> {
+        let proc_model = if let Some(processor_model) = args.processor_model {
+            processor_model
+        } else if let Some(att_report) = args.att_report {
+            let report =
+                report::read_report(att_report).context("Could not open attestation report")?;
+            get_processor_model(report)?
+        } else {
+            return Err(anyhow::anyhow!("Attestation report is missing or invalid, or the user did not specify a processor model"));
+        };
+
+        // Request CRL
+        let crl_der = request_crl_kds(proc_model, &args.endorser)?;
+
+        // Convert encoding
+        let bytes: Vec<u8> = match args.encoding {
+            CertFormat::Pem => match encode_string("X509 CRL", LineEnding::LF, &crl_der) {
+                Ok(crl_pem) => crl_pem.into(),
+                _ => return Err(anyhow::anyhow!("Could not convert CRL from DER to PEM")),
+            },
+            CertFormat::Der => crl_der,
+        };
+
+        if !args.certs_dir.exists() {
+            fs::create_dir(&args.certs_dir).context("Could not create certs folder")?;
+        }
+
+        // Write CRL into directory
+        let crl_path: PathBuf = args.certs_dir.join(format!("crl.{}", args.encoding));
+        let mut file = if crl_path.exists() {
+            std::fs::OpenOptions::new()
+                .write(true)
+                .truncate(true)
+                .open(crl_path)
+                .context("Unable to overwrite CRL contents")?
+        } else {
+            fs::File::create(crl_path).context("Unable to create CRL")?
+        };
+
+        file.write(&bytes)
+            .context(format!("unable to write data to file {:?}", file))?;
+
+        Ok(())
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
