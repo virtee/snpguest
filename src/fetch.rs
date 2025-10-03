@@ -113,12 +113,12 @@ impl fmt::Display for ProcType {
 
 pub fn get_processor_model(att_report: AttestationReport) -> Result<ProcType> {
     if att_report.version < 3 {
-        if [0u8; 64] == *att_report.chip_id {
+        if [0u8; 64] == att_report.chip_id {
             return Err(anyhow::anyhow!(
                 "Attestation report version is lower than 3 and Chip ID is all 0s. Make sure MASK_CHIP_ID is set to 0 or update firmware."
             ));
         } else {
-            let chip_id = *att_report.chip_id;
+            let chip_id = att_report.chip_id;
             if chip_id[8..64] == [0; 56] {
                 return Ok(ProcType::Turin);
             } else {
@@ -593,7 +593,7 @@ mod tests {
     fn test_get_processor_model_version_too_low() {
         let att_report = AttestationReport {
             version: 2,
-            chip_id: [1; 64].try_into().unwrap(),
+            chip_id: [1; 64],
             ..Default::default()
         };
         let result = get_processor_model(att_report);

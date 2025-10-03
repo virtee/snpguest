@@ -13,6 +13,7 @@ use sev::{
         vcpu_types::{cpu_sig, CpuType},
         vmsa::{GuestFeatures, VMMType},
     },
+    parser::ByteParser,
 };
 use std::{fs::OpenOptions, io::Write, path::PathBuf};
 
@@ -305,13 +306,13 @@ mod idblock {
     pub fn generate_id_block(args: Args, quiet: bool) -> Result<()> {
         let ld =
             if &args.launch_digest[..args.launch_digest.char_indices().nth(2).unwrap().0] == "0x" {
-                SnpLaunchDigest::new(Vec::from_hex(&args.launch_digest[2..])?.try_into()?)
+                SnpLaunchDigest::from_bytes(Vec::from_hex(&args.launch_digest[2..])?.as_slice())?
             } else {
-                SnpLaunchDigest::new(
+                SnpLaunchDigest::from_bytes(
                     general_purpose::STANDARD
                         .decode(args.launch_digest)?
-                        .try_into()?,
-                )
+                        .as_slice(),
+                )?
             };
 
         let family_id = match args.family_id {
@@ -349,10 +350,8 @@ mod idblock {
         )?;
 
         // Formatted in Base-64 since it's the format QEMU takes.
-        let id_block_string =
-            general_purpose::STANDARD.encode(bincode::serialize(&measurements.id_block)?);
-        let id_auth_string =
-            general_purpose::STANDARD.encode(bincode::serialize(&measurements.id_auth)?);
+        let id_block_string = general_purpose::STANDARD.encode(measurements.id_block.to_bytes()?);
+        let id_auth_string = general_purpose::STANDARD.encode(measurements.id_auth.to_bytes()?);
 
         // If Id-Block file is provided, store Id-Block value in the file
         if let Some(id_file) = args.id_file {

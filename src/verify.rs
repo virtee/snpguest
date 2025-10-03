@@ -14,6 +14,7 @@ use std::{
 
 use openssl::{ecdsa::EcdsaSig, sha::Sha384};
 use sev::certs::snp::Chain;
+use sev::parser::ByteParser;
 
 #[derive(Subcommand)]
 pub enum VerifyCmd {
@@ -38,7 +39,7 @@ pub fn find_cert_in_dir(dir: &Path, cert: &str) -> Result<PathBuf, anyhow::Error
     } else if dir.join(format!("{cert}.der")).exists() {
         Ok(dir.join(format!("{cert}.der")))
     } else {
-        return Err(anyhow::anyhow!("{cert} certificate not found in directory"));
+        Err(anyhow::anyhow!("{cert} certificate not found in directory"))
     }
 }
 
@@ -216,8 +217,7 @@ mod attestation {
         // Get the attestation report signature
         let ar_signature = EcdsaSig::try_from(&att_report.signature)
             .context("Failed to get ECDSA Signature from attestation report.")?;
-        let mut report_bytes = Vec::new();
-        att_report.write_bytes(&mut report_bytes)?;
+        let report_bytes = att_report.to_bytes()?;
         let signed_bytes = &report_bytes[0x0..0x2A0];
 
         let mut hasher: Sha384 = Sha384::new();
@@ -369,7 +369,7 @@ mod attestation {
         // Compare HWID information only on VCEK
         if common_name == CertType::VCEK {
             if let Some(cert_hwid) = extensions.get(&SnpOid::HwId.oid()) {
-                if !check_cert_bytes(cert_hwid, &*att_report.chip_id) {
+                if !check_cert_bytes(cert_hwid, &att_report.chip_id) {
                     return Err(anyhow::anyhow!(
                         "Report TCB ID and Certificate ID mismatch encountered."
                     ));
