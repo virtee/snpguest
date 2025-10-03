@@ -12,6 +12,7 @@ use std::{
 use anyhow::{anyhow, Result};
 use rand::{thread_rng, RngCore};
 use sev::firmware::guest::{AttestationReport, Firmware};
+use sev::parser::ByteParser;
 
 // Read a bin-formatted attestation report.
 pub fn read_report(att_report_path: PathBuf) -> Result<AttestationReport, anyhow::Error> {
@@ -134,7 +135,9 @@ pub fn get_report(args: ReportArgs, hv: bool) -> Result<()> {
         .write(true)
         .open(&args.att_report_path)?;
 
-    report.write_bytes(&mut file)?;
+    
+        let bytes = report.to_bytes()?.to_vec();
+        file.write_all(&bytes)?;
 
     /*
      * Write reports report data (only for --random or --platform).
@@ -149,7 +152,7 @@ pub fn get_report(args: ReportArgs, hv: bool) -> Result<()> {
     } else if args.platform {
         // Because random data cannot be provided for platform, we will pull the
         // data provided by the vTPM from the report.
-        reqdata_write(args.request_file, &*report.report_data)
+        reqdata_write(args.request_file, &report.report_data)
             .context("unable to write platform request data")?;
     }
 

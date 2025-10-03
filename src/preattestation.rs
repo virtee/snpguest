@@ -15,6 +15,7 @@ use sev::{
     },
 };
 use std::{fs::OpenOptions, io::Write, path::PathBuf};
+use sev::parser::ByteParser;
 
 #[derive(Subcommand)]
 pub enum PreAttestationCmd {
@@ -305,11 +306,12 @@ mod idblock {
     pub fn generate_id_block(args: Args, quiet: bool) -> Result<()> {
         let ld =
             if &args.launch_digest[..args.launch_digest.char_indices().nth(2).unwrap().0] == "0x" {
-                SnpLaunchDigest::new(Vec::from_hex(&args.launch_digest[2..])?.try_into()?)
+                SnpLaunchDigest::new(Vec::from_hex(&args.launch_digest[2..])?.as_slice().try_into()?)
             } else {
                 SnpLaunchDigest::new(
                     general_purpose::STANDARD
                         .decode(args.launch_digest)?
+                        .as_slice()
                         .try_into()?,
                 )
             };
@@ -350,9 +352,9 @@ mod idblock {
 
         // Formatted in Base-64 since it's the format QEMU takes.
         let id_block_string =
-            general_purpose::STANDARD.encode(bincode::serialize(&measurements.id_block)?);
+            general_purpose::STANDARD.encode(measurements.id_block.to_bytes()?.as_ref());
         let id_auth_string =
-            general_purpose::STANDARD.encode(bincode::serialize(&measurements.id_auth)?);
+            general_purpose::STANDARD.encode(measurements.id_auth.to_bytes()?.as_ref());
 
         // If Id-Block file is provided, store Id-Block value in the file
         if let Some(id_file) = args.id_file {
