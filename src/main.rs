@@ -22,7 +22,7 @@ use report::ReportArgs;
 use verify::VerifyCmd;
 
 use anyhow::{Context, Result};
-use clap::{arg, Parser, Subcommand, ValueEnum};
+use clap::{Parser, Subcommand, ValueEnum};
 
 #[derive(Parser)]
 #[command(author, version, about, long_about = None)]
