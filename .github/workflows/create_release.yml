@@ -1,6 +1,5 @@
-permissions:  
-  contents: write  
-  
+name: Build and Release  
+
 on:  
   workflow_dispatch:  
     inputs:  
@@ -19,32 +18,27 @@ on:
   pull_request:  
     branches: [main, master]  
   
-name: Build and Release  
+permissions:  
+  contents: write  
   
 jobs:  
   build:  
     name: Build and Test  
     runs-on: ubuntu-latest  
-    steps:  
+    steps:
+      - run: sudo apt-get update
       - run: sudo apt-get install -y asciidoctor musl-tools  
       - uses: actions/checkout@v4  
-      - uses: actions-rs/toolchain@v1  
+      - uses: dtolnay/rust-toolchain@stable
         with:  
           toolchain: stable  
-          target: x86_64-unknown-linux-musl  
-          override: true  
-  
+          target: x86_64-unknown-linux-musl
+      
       - name: Build  
-        uses: actions-rs/cargo@v1  
-        with:  
-          command: build  
-          args: --release --target x86_64-unknown-linux-musl  
+        run: cargo build --release --target x86_64-unknown-linux-musl
   
       - name: Test  
-        uses: actions-rs/cargo@v1  
-        with:  
-          command: test  
-          args: --release --target x86_64-unknown-linux-musl  
+        run: cargo test --release --target x86_64-unknown-linux-musl
   
       - name: Verify binary exists  
         run: ls -la target/x86_64-unknown-linux-musl/release/snpguest  
