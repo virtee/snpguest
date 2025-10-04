@@ -1,35 +1,31 @@
-on: [push, pull_request]
 name: lint
+
+on: [push, pull_request]
+
+permissions:  
+  contents: read
+
 jobs:
   fmt:
     name: cargo fmt
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v2
-      - uses: actions-rs/toolchain@v1
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt
           toolchain: nightly
-          profile: minimal
-          override: true
-      - uses: actions-rs/cargo@v1
-        with:
-          command: fmt
-          args: --all -- --check
+      - run: cargo fmt --all -- --check
 
   clippy:
     name: cargo clippy
     runs-on: ubuntu-latest
     steps:
+      - run: sudo apt-get update
       - run: sudo apt-get install -y asciidoctor
-      - uses: actions/checkout@v2
-      - uses: actions-rs/toolchain@v1
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
         with:
           components: clippy
           toolchain: 1.86.0
-          profile: minimal
-          override: true
-      - uses: actions-rs/cargo@v1
-        with:
-          command: clippy
-          args: --locked --all-targets -- -D clippy::all -D unused_imports -D warnings
+      - run: cargo clippy --locked --all-targets -- -D clippy::all -D unused_imports -D warnings
