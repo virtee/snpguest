@@ -306,7 +306,7 @@ snpguest verify <SUBCOMMAND>
 
     **Usage**
     ```bash
-    snpguest verify attestation $CERTS_DIR $ATT_REPORT_PATH [-t, --tcb] [-s, --signature]
+    snpguest verify attestation $CERTS_DIR $ATT_REPORT_PATH [-t, --tcb] [-s, --signature] [-m, --measurement] [-d, --host-data] [-r, --report-data]
     ```
     **Arguments**
 
@@ -318,6 +318,9 @@ snpguest verify <SUBCOMMAND>
 
     - `-t, --tcb`: Verify the Reported TCB section of the report only.
     - `-s, --signature`: Verify the signature of the report only.
+    - `-m, --measurement`: Verify the measurement from the attestation report.
+    - `-d, --host-data`: Verify the host-data from the attestation report.
+    - `-r, --report-data`: Verify the report-data from the attestation report. 
 
     **Example**
     ```bash
@@ -327,6 +330,12 @@ snpguest verify <SUBCOMMAND>
     snpguest verify attestation ./certs attestation-report.bin --tcb
     # Verify Attestation Signature only
     snpguest verify attestation ./certs attestation-report.bin --signature
+    # Verify Attestation Measurement only
+    snpguest verify attestation ./certs attestation-report.bin --measurement
+    # Verify Attestation host-data only
+    snpguest verify attestation ./certs attestation-report.bin --host-data
+    # Verify Attestation report-data only
+    snpguest verify attestation ./certs attestation-report.bin --report-data
     ```
 
 ### Global Options
