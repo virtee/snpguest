@@ -306,7 +306,7 @@ snpguest verify <SUBCOMMAND>
 
     **Usage**
     ```bash
-    snpguest verify attestation $CERTS_DIR $ATT_REPORT_PATH [-t, --tcb] [-s, --signature]
+    snpguest verify attestation $CERTS_DIR $ATT_REPORT_PATH [-t, --tcb] [-s, --signature] [-m, --measurement] [-d, --host-data] [-r, --report-data]
     ```
     **Arguments**
 
@@ -318,6 +318,9 @@ snpguest verify <SUBCOMMAND>
 
     - `-t, --tcb`: Verify the Reported TCB section of the report only.
     - `-s, --signature`: Verify the signature of the report only.
+    - `-m, --measurement`: Verify the measurement from the attestation report.
+    - `-d, --host-data`: Verify the host-data from the attestation report.
+    - `-r, --report-data`: Verify the report-data from the attestation report. 
 
     **Example**
     ```bash
@@ -327,6 +330,12 @@ snpguest verify <SUBCOMMAND>
     snpguest verify attestation ./certs attestation-report.bin --tcb
     # Verify Attestation Signature only
     snpguest verify attestation ./certs attestation-report.bin --signature
+    # Verify Attestation Measurement only
+    snpguest verify attestation --measurement 0xf28aac58964258d8ae0b2e88a706fc7afd0bb524f6a291ac3eedeccb73f89d7cfcf2e4fb6045e7d5201e41d1726afa02 /home/amd/certs /home/amd/report.bin
+    # Verify Attestation host-data only
+    snpguest verify attestation --host-data 0x7e4a3f9c1b82a056d39f0d44e5c8a7b1f02394de6b58ac0d7e3c11af0042bd59 /home/amd/certs /home/amd/report.bin
+    # Verify Attestation report-data only
+    snpguest verify attestation --report-data 0x5482c1ffe29145d47cf678f7681e3b64a89909d6cf8ec0104cfacb0b0418f005f564ad14f5c1381c99b74903a780ea340e887c9b445e9c760bf0b74115b26d45 /home/amd/certs /home/amd/report.bin 
     ```
 
 ### Global Options
