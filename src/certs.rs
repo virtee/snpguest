@@ -149,15 +149,14 @@ pub fn write_cert(
     let cert_path: PathBuf = path.join(format!("{cert_str}.{encoding}"));
 
     // Write cert into directory
-    let mut file = if cert_path.exists() {
-        std::fs::OpenOptions::new()
-            .write(true)
-            .truncate(true)
-            .open(cert_path)
-            .context(format!("Unable to overwrite {cert_str} cert contents"))?
-    } else {
-        fs::File::create(cert_path).context(format!("Unable to create {cert_str} certificate"))?
-    };
+    let mut file = std::fs::OpenOptions::new()
+        .write(true)
+        .create(true)
+        .truncate(true)
+        .open(&cert_path)
+        .context(format!(
+            "unable to create or overwrite {cert_str} certificate"
+        ))?;
 
     file.write(&bytes)
         .context(format!("unable to write data to file {:?}", file))?;
