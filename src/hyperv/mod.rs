@@ -77,8 +77,8 @@ pub mod report {
     use super::*;
 
     use anyhow::{anyhow, Context};
-    use serde::{Deserialize, Serialize};
     use sev::firmware::guest::AttestationReport;
+    use sev::parser::ByteParser;
     use tss_esapi::{
         abstraction::nv,
         handles::NvIndexTpmHandle,
@@ -87,14 +87,6 @@ pub mod report {
     };
 
     const VTPM_HCL_REPORT_NV_INDEX: u32 = 0x01400001;
-
-    #[repr(C)]
-    #[derive(Deserialize, Serialize, Debug, Clone, Copy)]
-    struct Hcl {
-        rsv1: [u32; 8],
-        report: AttestationReport,
-        rsv2: [u32; 5],
-    }
 
     pub fn get(vmpl: u32) -> Result<AttestationReport> {
         if vmpl > 0 {
@@ -126,7 +118,7 @@ pub mod report {
 
         let report_bytes = &bytes[REPORT_RANGE];
 
-        AttestationReport::from_bytes(report_bytes)
+        AttestationReport::from_bytes(&report_bytes)
             .context("Unable to convert HCL report bytes to AttestationReport")
     }
 }
