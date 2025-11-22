@@ -79,6 +79,7 @@ pub mod report {
     use anyhow::{anyhow, Context};
     use serde::{Deserialize, Serialize};
     use sev::firmware::guest::AttestationReport;
+    use sev::parser::ByteParser;
     use tss_esapi::{
         abstraction::nv,
         handles::NvIndexTpmHandle,
