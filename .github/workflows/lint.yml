@@ -21,8 +21,6 @@ jobs:
     name: cargo clippy
     runs-on: ubuntu-latest
     steps:
-      - run: sudo apt-get update
-      - run: sudo apt-get install -y asciidoctor
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
         with:
