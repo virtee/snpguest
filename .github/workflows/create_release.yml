@@ -26,8 +26,7 @@ jobs:
     name: Build and Test  
     runs-on: ubuntu-latest  
     steps:
-      - run: sudo apt-get update
-      - run: sudo apt-get install -y asciidoctor musl-tools  
+      - run: sudo apt-get update && sudo apt-get install -y musl-tools  
       - uses: actions/checkout@v4  
       - uses: dtolnay/rust-toolchain@stable
         with:  
