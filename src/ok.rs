@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: Apache-2.0
+// This file contains code for checking if the SEV-SNP feature appears enabled in the guest environment.
+
 use super::*;
 
 use std::fmt;
