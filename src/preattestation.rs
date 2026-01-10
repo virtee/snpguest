@@ -274,11 +274,11 @@ mod idblock {
         #[arg(value_name = "launch-digest", required = true)]
         pub launch_digest: String,
 
-        /// Family ID of the guest provided by the guest owner. Has to be 16 characters.
+        /// Family ID of the guest provided by the guest owner in hex. Has to be 32 characters (16 bytes).
         #[arg(short, long, value_name = "family-id")]
         pub family_id: Option<String>,
 
-        /// Image ID of the guest provided by the guest owner. Has to be 16 characters.
+        /// Image ID of the guest provided by the guest owner in hex. Has to be 32 characters (16 bytes).
         #[arg(short = 'm', long, value_name = "image-id")]
         pub image_id: Option<String>,
 
@@ -316,23 +316,25 @@ mod idblock {
             };
 
         let family_id = match args.family_id {
-            Some(family) => {
-                if family.chars().count() == 16 {
-                    Some(FamilyId::new(family.as_bytes().try_into()?))
-                } else {
-                    return Err(anyhow::anyhow!("Invalid Family Id length!"));
+            Some(s) => {
+                if s.len() != 32 {
+                    return Err(anyhow::anyhow!("Family ID must be 32 hex chars"));
                 }
+                let bytes: [u8; 16] =
+                    <[u8; 16]>::from_hex(&s).map_err(|_| anyhow::anyhow!("Invalid hex"))?;
+                Some(FamilyId::new(bytes))
             }
             None => None,
         };
 
         let image_id = match args.image_id {
-            Some(image) => {
-                if image.chars().count() == 16 {
-                    Some(ImageId::new(image.as_bytes().try_into()?))
-                } else {
-                    return Err(anyhow::anyhow!("Invalid Image Id length!"));
+            Some(s) => {
+                if s.len() != 32 {
+                    return Err(anyhow::anyhow!("Image ID must be 32 hex chars"));
                 }
+                let bytes: [u8; 16] =
+                    <[u8; 16]>::from_hex(&s).map_err(|_| anyhow::anyhow!("Invalid hex"))?;
+                Some(ImageId::new(bytes))
             }
             None => None,
         };
