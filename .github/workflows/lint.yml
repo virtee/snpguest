@@ -27,3 +27,13 @@ jobs:
           components: clippy
           toolchain: 1.86.0
       - run: cargo clippy --locked --all-targets -- -D clippy::all -D unused_imports -D warnings
+
+  spdx:
+    name: check spdx headers
+    runs-on: ubuntu-latest
+    steps:
+      - name: checkout
+        uses: actions/checkout@v4
+      - uses: enarx/spdx@master
+        with:
+          licenses: Apache-2.0
