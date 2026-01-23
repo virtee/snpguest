@@ -76,13 +76,13 @@ fn main() -> Result<()> {
     let snpguest = SnpGuest::parse();
 
     #[cfg(feature = "hyperv")]
-    let hv = hyperv::present();
+    let azcvm_present = hyperv::check::present();
 
     #[cfg(not(feature = "hyperv"))]
-    let hv = false;
+    let azcvm_present = false;
 
     let status = match snpguest.cmd {
-        SnpGuestCmd::Report(args) => report::get_report(args, hv),
+        SnpGuestCmd::Report(args) => report::get_report(args, azcvm_present),
         SnpGuestCmd::Certificates(args) => certs::get_ext_certs(args),
         SnpGuestCmd::Fetch(subcmd) => fetch::cmd(subcmd),
         SnpGuestCmd::Verify(subcmd) => verify::cmd(subcmd, snpguest.quiet),

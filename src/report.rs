@@ -46,75 +46,60 @@ pub struct ReportArgs {
     #[arg(value_name = "att-report-path", required = true)]
     pub att_report_path: PathBuf,
 
-    /// Use random data for attestation report request. Writes data
-    /// to ./random-request-file.txt by default, use --request to specify
-    /// where to write data.
-    #[arg(short, long, default_value_t = false, conflicts_with = "platform")]
-    pub random: bool,
-
-    /// Specify an integer VMPL level between 0 and 3 that the Guest is running on.
-    #[arg(short, long, default_value = "1", value_name = "vmpl")]
-    pub vmpl: Option<u32>,
-
     /// Provide file with data for attestation-report request. If provided
     /// with random flag, then the random data will be written in the
     /// provided path.
     #[arg(value_name = "request-file", required = true)]
     pub request_file: PathBuf,
 
-    /// Expect that the 64-byte report data will already be provided by the platform provider.
-    #[arg(short, long, conflicts_with = "random")]
-    pub platform: bool,
-}
+    /// Use random data for attestation report request and write it to the request file.
+    #[arg(short, long, default_value_t = false)]
+    pub random: bool,
 
-impl ReportArgs {
-    pub fn verify(&self, hyperv: bool) -> Result<()> {
-        if self.random && self.platform {
-            return Err(anyhow!(
-                "--random and --platform both enabled (not allowed). Consult man page."
-            ));
-        }
+    /// Specify an integer VMPL level between 0 and 3 that the Guest is running on.
+    #[arg(short, long, default_value = "1", value_name = "vmpl")]
+    pub vmpl: Option<u32>,
 
-        if self.platform && !hyperv {
-            #[cfg(feature = "hyperv")]
-            let msg = "--platform enabled yet Hyper-V guest with SEV-SNP isolation not detected (not allowed). Consult man page.";
-            #[cfg(not(feature = "hyperv"))]
-            let msg =
-                "--platform requires a binary built with --features hyperv. Consult man page.";
-
-            return Err(anyhow!(msg));
-        }
-
-        Ok(())
-    }
+    /// Request attestation report on vTPM-based Azure Confidential VM.
+    #[arg(short, long)]
+    pub azure_cvm: bool,
 }
 
 fn request_hardware_report(
-    data: Option<[u8; 64]>,
+    data: [u8; 64],
     vmpl: Option<u32>,
-    _platform: bool,
+    _azure_cvm: bool,
 ) -> Result<AttestationReport> {
     #[cfg(feature = "hyperv")]
-    if _platform {
-        return hyperv::report::get(vmpl.unwrap_or(0));
+    if _azure_cvm {
+        if vmpl.unwrap_or(0) > 0 {
+            eprintln!("Warning: --vmpl argument was ignored because attestation report is requested by the paravisor at VMPL 0.");
+        }
+        return hyperv::report::get(data);
     }
 
     let mut fw = Firmware::open().context("unable to open /dev/sev-guest")?;
     Ok(AttestationReport::from_bytes(
-        fw.get_report(None, data, vmpl)
-            .context("unable to fetch attestation report")?
+        fw.get_report(None, Some(data), vmpl)
+            .context("unable to get attestation report")?
             .as_slice(),
     )?)
 }
 
 // Request attestation report and write it into a file
-pub fn get_report(args: ReportArgs, hv: bool) -> Result<()> {
-    args.verify(hv)?;
+pub fn get_report(args: ReportArgs, azcvm_present: bool) -> Result<()> {
+    if args.azure_cvm && !azcvm_present {
+        #[cfg(feature = "hyperv")]
+        let msg =
+            "--azure-cvm enabled yet Hyper-V guest with SEV-SNP isolation not detected (not allowed).";
+        #[cfg(not(feature = "hyperv"))]
+        let msg =
+            "--azure-cvm requires a binary built with --features hyperv. Please rebuild with --features hyperv.";
+        return Err(anyhow!(msg));
+    }
 
-    let data: Option<[u8; 64]> = if args.random {
-        Some(create_random_request())
-    } else if args.platform {
-        None
+    let data: [u8; 64] = if args.random {
+        create_random_request()
     } else {
         /*
          * Read from the request file.
@@ -124,10 +109,10 @@ pub fn get_report(args: ReportArgs, hv: bool) -> Result<()> {
         file.read_exact(&mut bytes)
             .context("unable to read 64 bytes from REQUEST_FILE")?;
 
-        Some(bytes)
+        bytes
     };
 
-    let report = request_hardware_report(data, args.vmpl, args.platform)?;
+    let report = request_hardware_report(data, args.vmpl, args.azure_cvm)?;
 
     /*
      * Serialize and write attestation report.
@@ -144,17 +129,8 @@ pub fn get_report(args: ReportArgs, hv: bool) -> Result<()> {
      * Write reports report data (only for --random or --platform).
      */
     if args.random {
-        if let Some(data) = data {
-            reqdata_write(args.request_file, &data)
-                .context("unable to write random request data to specified file")?;
-        } else {
-            return Err(anyhow!("unable to write empty buffer to specified file."));
-        }
-    } else if args.platform {
-        // Because random data cannot be provided for platform, we will pull the
-        // data provided by the vTPM from the report.
-        reqdata_write(args.request_file, &report.report_data)
-            .context("unable to write platform request data")?;
+        reqdata_write(args.request_file, &data)
+            .context("unable to write random request data to specified file")?;
     }
 
     Ok(())
