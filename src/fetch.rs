@@ -1,5 +1,134 @@
 // SPDX-License-Identifier: Apache-2.0
-// This file contains subcommands for fetching various types of certificates from the AMD Secure Processor.
+
+//! Fetches certificates and CRL from AMD KDS.
+//!
+//! This module provides the following subcommands, which request certificates
+//! and CRLs from the AMD Key Distribution Service (KDS).
+//!
+//! - `fetch ca` — Fetch the AMD Root Key (ARK) and AMD SEV Key (ASK/ASVK)
+//! - `fetch vcek` — Fetch the Versioned Chip Endorsement Key (VCEK)
+//! - `fetch crl` — Fetch the Certificate Revocation List (CRL)
+//!
+//! Certificates are fetched over HTTPS from `kdsintf.amd.com` and written
+//! to disk in the user-specified encoding (PEM or DER).
+//!
+//! ## `fetch ca`
+//!
+//! ```bash
+//! snpguest fetch ca $ENCODING $CERTS_DIR $PROCESSOR_MODEL [OPTIONS]
+//! ```
+//!
+//! Fetches the AMD root CA certificate (ARK) and the AMD intermediate certificate
+//! (ASK for VCEK or ASVK for VLEK) from the AMD KDS, and writes them in PEM or
+//! DER format.
+//!
+//! ### Arguments and Options
+//!
+//! | Argument/Option | Description | Default |
+//! | :--      | :--        | :--    |
+//! | `$ENCODING` | The certificate encoding to store the certificates in (PEM or DER). | *required* |
+//! | `$CERTS_DIR` | The directory to store the certificates in. | *required* |
+//! | `$PROCESSOR_MODEL` | The host processor model (`milan`, `genoa`, `bergano`, `sienna`, `turin`). (Conflicts with `--report`) | required |
+//! | `-r, --report` | Path to the attestation report to detect the host processor model. (Conflicts with `$PROCESSOR_MODEL`) | - |
+//! | `-e, --endorser` | The endorser type (`vcek` or `vlek`). | `vcek` |
+//!
+//! The user must specify either the host processor model `$PROCESSOR_MODEL`
+//! (`milan`, `genoa`, `bergano`, `sienna`, `turin`) or the path to an attestation
+//! report using the `-r, --report` option. When the report is provided, the
+//! command attempts to infer the host processor model from the report.
+//! Autodetection succeeds only under the following conditions:
+//!
+//! 1. **Report Version 3 or later**
+//!    - both `CPU_FAM_ID` and `CPU_MOD_ID` are present (i.e. not missing)
+//! 2. **Report Version 2**
+//!    - the host processor model is Turin
+//!    - the `CHIP_ID` is not masked, i.e. `MASK_CHIP_ID` is zero-filled
+//!
+//! In the latter case, automatic detection is based on heuristics: whereas
+//! pre-Turin's `CHIP_ID` utilises the full 64 bytes, Turin's `CHIP_ID` uses
+//! only the first 8 bytes. This heuristics may not remain valid for future
+//! processors.
+//!
+//! ### Example
+//!
+//! ```bash
+//! # Fetch CA cert chain in DER encoding for with milan with VLEK
+//! # ark.der and asvk.der will be stored in ./certs
+//! snpguest fetch ca der ./certs milan -e vlek
+//!
+//! # Fetch CA cert chain in PEM encoding associated with V3+ report and VCEK
+//! # ark.pem and ask.pem will be stored in ./certs
+//! snpguest fetch ca pem ./certs -r report.bin -e vcek
+//! ```
+//!
+//! ## `fetch vcek`
+//!
+//! ```bash
+//! snpguest fetch vcek $ENCODING $CERTS_DIR $ATT_REPORT_PATH [OPTIONS]
+//! ```
+//!
+//! Fetches the VCEK certificate from the AMD KDS, and write it in PEM or DER
+//! format.
+//!
+//! ### Arguments and Options
+//!
+//! | Argument/Option | Description | Default |
+//! | :--      | :--        | :--    |
+//! | `$ENCODING` | The certificate encoding to store the certificates in (PEM or DER). | *required* |
+//! | `$CERTS_DIR` | The directory to store the certificates in. | *required* |
+//! | `$ATT_REPORT_PATH` | The path of the stored attestation report. | *required* |
+//! | `-p, --processor-model` | The host processor model (`milan`, `genoa`, `bergano`, `sienna`, `turin`). If the report is *older than version 3*, this option must be specified. | - |
+//!
+//! The user must provide the path to an attestation report `$ATT_REPORT_PATH`
+//! to get the REPORTED_TCB and CHIP_ID.
+//!
+//! The user can specify the host processor model using the `--processor-model`
+//! option. If the processor model is not specified, the command attempts to infer
+//! the host processor model from the report contents. Autodetection follows the
+//! same rules and limitations as the `ca` subcommand.
+//!
+//! ### Example
+//!
+//! ```bash
+//! # Fetch VCEK certificate in PEM encoding associated with V3+ report from AMD KDS
+//! # vcek.pem will be stored in ./certs
+//! snpguest fetch vcek pem ./certs report.bin
+//!
+//! # If the report is older than V3, manually specify the processor model
+//! snpguest fetch vcek pem ./certs report.bin -p milan
+//! ```
+//!
+//! ## `fetch crl`
+//!
+//! ```bash
+//! snpguest fetch crl $ENCODING $CERTS_DIR $PROCESSOR_MODEL [OPTIONS]
+//! ```
+//!
+//! Fetches the Certificate Revocation List (CRL) from the AMD KDS, and writes
+//! it in PEM or DER format. This subcommand has completely the same API as the
+//! `ca` subcommand.
+//!
+//! ### Arguments and Options
+//!
+//! | Argument/Option | Description | Default |
+//! | :--      | :--        | :--    |
+//! | `$ENCODING` | The CRL encoding to store the CRL in (PEM or DER). | *required* |
+//! | `$CERTS_DIR` | The directory to store the CRL in. | *required* |
+//! | `$PROCESSOR_MODEL` | The host processor model (`milan`, `genoa`, `bergano`, `sienna`, `turin`). (Conflicts with `--report`) | required |
+//! | `-r, --report` | Path to the attestation report to detect the host processor model. (Conflict with `$PROCESSOR_MODEL`) | - |
+//! | `-e, --endorser` | The endorser type (`vcek` or `vlek`). | `vcek` |
+//!
+//! ### Example
+//!
+//! ```bash
+//! # Fetch CRL in DER encoding for milan with VLEK
+//! # crl.der will be stored in ./certs
+//! snpguest fetch crl der ./certs milan -e vlek
+//!
+//! # Fetch CRL in PEM encoding associated with V3+ report and VCEK
+//! # ark.pem and ask.pem will be stored in ./certs
+//! snpguest fetch crl pem ./certs -r report.bin -e vcek
+//! ```
 
 use super::*;
 
@@ -16,24 +145,26 @@ use sev::{
 
 use certs::{write_cert, CertFormat};
 
+/// Subcommands for fetching certificates and CRLs from the AMD KDS.
 #[derive(Subcommand)]
 pub enum FetchCmd {
-    /// Fetch the certificate authority (ARK & ASK) from the KDS.
+    /// Fetch the AMD Root Key (ARK) and AMD SEV Key (ASK/ASVK) from the KDS.
     CA(cert_authority::Args),
 
-    /// Fetch the VCEK from the KDS.
+    /// Fetch the Versioned Chip Endorsement Key (VCEK) from the KDS.
     Vcek(vcek::Args),
 
-    /// Fetch the CRL from the KDS.
+    /// Fetch the Certificate Revocation List (CRL) from the KDS.
     Crl(crl::Args),
 }
 
+/// The type of attestation signing key (endorsement key).
 #[derive(ValueEnum, Debug, Clone, PartialEq, Eq)]
 pub enum Endorsement {
-    /// Versioned Chip Endorsement Key
+    /// Versioned Chip Endorsement Key — unique per chip, derived from fused secrets.
     Vcek,
 
-    /// Versioned Loaded Endorsement Key
+    /// Versioned Loaded Endorsement Key — provisioned by the platform owner.
     Vlek,
 }
 
@@ -57,21 +188,25 @@ impl FromStr for Endorsement {
         }
     }
 }
+
+/// AMD EPYC processor model used to select the correct KDS endpoint.
+///
+/// Bergamo and Siena share the same KDS endpoint as Genoa.
 #[derive(ValueEnum, Debug, Clone, PartialEq, Eq)]
 pub enum ProcType {
-    /// 3rd Gen AMD EPYC Processor (Standard)
+    /// 3rd Gen AMD EPYC Processor (Standard).
     Milan,
 
-    /// 4th Gen AMD EPYC Processor (Standard)
+    /// 4th Gen AMD EPYC Processor (Standard).
     Genoa,
 
-    /// 4th Gen AMD EPYC Processor (Performance)
+    /// 4th Gen AMD EPYC Processor (Performance). Uses the Genoa KDS endpoint.
     Bergamo,
 
-    /// 4th Gen AMD EPYC Processor (Edge)
+    /// 4th Gen AMD EPYC Processor (Edge). Uses the Genoa KDS endpoint.
     Siena,
 
-    /// 5th Gen AMD EPYC Processor (Standard)
+    /// 5th Gen AMD EPYC Processor (Standard).
     Turin,
 }
 
@@ -111,6 +246,11 @@ impl fmt::Display for ProcType {
     }
 }
 
+/// Determine the processor model from an attestation report.
+///
+/// For report version 3+, uses the CPU family and model IDs. For version 2,
+/// attempts heuristic detection based on the CHIP_ID field (only succeeds
+/// for Turin, where CHIP_ID uses only the first 8 bytes).
 pub fn get_processor_model(att_report: AttestationReport) -> Result<ProcType> {
     if att_report.version < 3 {
         if [0u8; 64] == att_report.chip_id {
@@ -151,6 +291,7 @@ pub fn get_processor_model(att_report: AttestationReport) -> Result<ProcType> {
     }
 }
 
+/// Dispatch to the appropriate fetch subcommand handler.
 pub fn cmd(cmd: FetchCmd) -> Result<()> {
     match cmd {
         FetchCmd::CA(args) => cert_authority::fetch_ca(args),
@@ -163,17 +304,22 @@ mod cert_authority {
     use super::*;
     use reqwest::StatusCode;
 
+    /// CLI arguments for `fetch ca`.
+    ///
+    /// Fetches the ARK and ASK (or ASVK for VLEK) from the AMD KDS.
+    /// Either `processor_model` or `att_report` must be specified (mutually exclusive).
     #[derive(Parser)]
     pub struct Args {
-        /// Specify encoding to use for certificates.
+        /// Certificate encoding format (PEM or DER).
         #[arg(value_name = "encoding", required = true, ignore_case = true)]
         pub encoding: CertFormat,
 
-        /// Directory to store the certificates in.
+        /// Directory to store the certificates in. Created if it does not exist.
         #[arg(value_name = "certs-dir", required = true)]
         pub certs_dir: PathBuf,
 
-        /// Specify the processor model for the desired certificate chain.
+        /// Host processor model (milan, genoa, bergamo, siena, turin).
+        /// Conflicts with `--report`.
         #[arg(
             value_name = "processor-model",
             required_unless_present = "att_report",
@@ -182,7 +328,9 @@ mod cert_authority {
         )]
         pub processor_model: Option<ProcType>,
 
-        /// Attestation Report to get processor model from (V3 of report needed).
+        /// Path to an attestation report to auto-detect the processor model.
+        /// Requires report version 3+, or version 2 with a Turin processor.
+        /// Conflicts with the positional `processor-model` argument.
         #[arg(
             short = 'r',
             long = "report",
@@ -192,12 +340,12 @@ mod cert_authority {
         )]
         pub att_report: Option<PathBuf>,
 
-        /// Specify which endorsement certificate chain to pull, either VCEK or VLEK.
+        /// Endorser type: VCEK (fetches ARK + ASK) or VLEK (fetches ARK + ASVK).
         #[arg(short, long, value_name = "endorser", default_value_t = Endorsement::Vcek, ignore_case = true)]
         pub endorser: Endorsement,
     }
 
-    // Function to build kds request for ca chain and return a vector with the 2 certs (ASK & ARK)
+    /// Fetch the CA certificate chain (ARK + ASK/ASVK) from the AMD KDS.
     pub fn request_ca_kds(
         processor_model: ProcType,
         endorser: &Endorsement,
@@ -230,7 +378,7 @@ mod cert_authority {
         }
     }
 
-    // Fetch the ca from the kds and write it into the certs directory
+    /// Fetch the CA certificates from the KDS and write them to the specified directory.
     pub fn fetch_ca(args: Args) -> Result<()> {
         let proc_model = if let Some(processor_model) = args.processor_model {
             processor_model
@@ -277,26 +425,30 @@ mod vcek {
 
     use super::*;
 
+    /// CLI arguments for `fetch vcek`.
+    ///
+    /// Fetches the VCEK certificate from the AMD KDS using the REPORTED_TCB
+    /// and CHIP_ID from a stored attestation report.
     #[derive(Parser)]
     pub struct Args {
-        /// Specify encoding to use for certificates.
+        /// Certificate encoding format (PEM or DER).
         #[arg(value_name = "encoding", required = true, ignore_case = true)]
         pub encoding: CertFormat,
 
-        /// Directory to store the certificates in.
+        /// Directory to store the certificate in. Created if it does not exist.
         #[arg(value_name = "certs-dir", required = true)]
         pub certs_dir: PathBuf,
 
-        /// Path to attestation report to use to request VCEK.
+        /// Path to the attestation report (used to extract CHIP_ID and REPORTED_TCB).
         #[arg(value_name = "att-report-path", required = true)]
         pub att_report: PathBuf,
 
-        /// Specify the processor model for the desired vcek.
+        /// Host processor model. If not specified, auto-detected from the report.
         #[arg(short, long, value_name = "processor-model", ignore_case = true)]
         pub processor_model: Option<ProcType>,
     }
 
-    // Function to request vcek from KDS. Return vcek in der format.
+    /// Fetch the VCEK certificate from the AMD KDS in DER format.
     pub fn request_vcek_kds(
         processor_model: ProcType,
         att_report_path: PathBuf,
@@ -372,7 +524,7 @@ mod vcek {
         }
     }
 
-    // Function to request vcek from kds and write it into file
+    /// Fetch the VCEK from the KDS and write it to the specified directory.
     pub fn fetch_vcek(args: Args) -> Result<()> {
         let proc_model = if let Some(proc_model) = args.processor_model {
             proc_model
@@ -407,17 +559,23 @@ mod crl {
     use reqwest::StatusCode;
     use std::io::Write;
 
+    /// CLI arguments for `fetch crl`.
+    ///
+    /// Fetches the Certificate Revocation List from the AMD KDS.
+    /// Has the same interface as `fetch ca`: either `processor_model` or
+    /// `att_report` must be specified (mutually exclusive).
     #[derive(Parser)]
     pub struct Args {
-        /// Specify encoding to use for the CRL.
+        /// CRL encoding format (PEM or DER).
         #[arg(value_name = "encoding", required = true, ignore_case = true)]
         pub encoding: CertFormat,
 
-        /// Directory to store the CRL in.
+        /// Directory to store the CRL in. Created if it does not exist.
         #[arg(value_name = "certs-dir", required = true)]
         pub certs_dir: PathBuf,
 
-        /// Specify the processor model for the desired CRL.
+        /// Host processor model (milan, genoa, bergamo, siena, turin).
+        /// Conflicts with `--report`.
         #[arg(
             value_name = "processor-model",
             required_unless_present = "att_report",
@@ -426,7 +584,8 @@ mod crl {
         )]
         pub processor_model: Option<ProcType>,
 
-        /// Attestation Report to get processor model from (V3 of report needed).
+        /// Path to an attestation report to auto-detect the processor model.
+        /// Conflicts with the positional `processor-model` argument.
         #[arg(
             short = 'r',
             long = "report",
@@ -436,12 +595,12 @@ mod crl {
         )]
         pub att_report: Option<PathBuf>,
 
-        /// Specify which endorsement CRL to pull, either VCEK or VLEK.
+        /// Endorser type: VCEK or VLEK.
         #[arg(short, long, value_name = "endorser", default_value_t = Endorsement::Vcek, ignore_case = true)]
         pub endorser: Endorsement,
     }
 
-    // Function to build kds request for CRL and return a CRL
+    /// Fetch the CRL from the AMD KDS in DER format.
     pub fn request_crl_kds(
         processor_model: ProcType,
         endorser: &Endorsement,
@@ -469,7 +628,7 @@ mod crl {
         }
     }
 
-    // Fetch the CRL from the kds and write it into the certs directory
+    /// Fetch the CRL from the KDS and write it to the specified directory.
     pub fn fetch_crl(args: Args) -> Result<()> {
         let proc_model = if let Some(processor_model) = args.processor_model {
             processor_model

@@ -1,5 +1,43 @@
 // SPDX-License-Identifier: Apache-2.0
-// This file contains code related to managing certificates. It defines a structure for managing certificate paths (`CertPaths`) and functions for obtaining extended certificates from the AMD Secure Processor.
+
+//! Requests certificates from Host.
+//!
+//! This module provides the `certificate` subcommand which retrieves certificates
+//! cached in hypervisor memory via the AMD Secure Processor (`SNP_GET_EXT_REPORT` ioctl),
+//! converting certificate formats (PEM/DER).
+//!
+//! ## `certificates`
+//!
+//! ```bash
+//! snpguest report $ATT_REPORT_PATH $REQUEST_FILE [OPTIONS]
+//! ```
+//!
+//! The output depends on which certificates are cached in the hypervisor memory.
+//! Before executing this command, the host (platform owner) must fetch certificates
+//! from AMD KDS and load them into the extended configuration.
+//!
+//! ## Note
+//!
+//! In principle, the host can cache any certificate. However, in practice, it
+//! typically caches only the leaf certificate (VCEK or VLEK) or the entire
+//! certificate chain.
+//!
+//! Note that this feature is *not* supported in the current upstream kernels.
+//! Actual behavior also depends on the kernel version. For example, behavior
+//! when executed without loading certificates.
+//!
+//! ## Arguments
+//!
+//! | Argument | Description | Default |
+//! | :--      | :--        | :--    |
+//! | `$ENCODING` | The certificate encoding to store the certificates in (PEM or DER). All certificates will be in the same encoding. | *required* |
+//! | `$CERTS_DIR` | The directory to store the certificates in. If certificates already exist in the provided directory, they will be overwritten. | *required* |
+//!
+//! ## Example
+//!
+//! ```bash
+//! snpguest certificates pem ./certs
+//! ```
 
 use crate::fetch::Endorsement;
 
@@ -17,18 +55,25 @@ use sev::{
     firmware::{guest::Firmware, host::CertType},
 };
 
+/// Paths to the three certificates that form an SNP certificate chain:
+/// ARK (AMD Root Key), ASK (AMD SEV Key) or ASVK (AMD SEV-VLEK Key),
+/// and VCEK (Versioned Chip Endorsement Key) or VLEK (Versioned Loaded Endorsement Key).
 pub struct CertPaths {
+    /// Path to the AMD Root Key certificate.
     pub ark_path: PathBuf,
+    /// Path to the AMD SEV Key (or ASVK for VLEK chains) certificate.
     pub ask_path: PathBuf,
+    /// Path to the VCEK or VLEK certificate.
     pub vek_path: PathBuf,
 }
 
+/// Supported certificate encoding formats.
 #[derive(ValueEnum, Clone, Copy)]
 pub enum CertFormat {
-    /// Certificates are encoded in PEM format.
+    /// PEM (Privacy-Enhanced Mail) encoding.
     Pem,
 
-    /// Certificates are encoded in DER format.
+    /// DER (Distinguished Encoding Rules) binary encoding.
     Der,
 }
 
@@ -52,7 +97,10 @@ impl FromStr for CertFormat {
     }
 }
 
-// Function that will convert a cert path into a snp Certificate
+/// Read a certificate file and convert it into an SNP [`Certificate`].
+///
+/// If `cert_path` is empty, falls back to looking in `./certs/` for
+/// `{cert_type}.pem` or `{cert_type}.der`.
 pub fn convert_path_to_cert(
     cert_path: &PathBuf,
     cert_type: &str,
@@ -88,7 +136,7 @@ pub fn convert_path_to_cert(
     Ok(Certificate::from_bytes(&buf)?)
 }
 
-// Tryfrom function that takes in 3 certificate paths returns a snp Certificate Chain
+/// Build an SNP [`Chain`] from three certificate file paths (ARK, ASK/ASVK, VCEK/VLEK).
 impl TryFrom<CertPaths> for Chain {
     type Error = anyhow::Error;
     fn try_from(content: CertPaths) -> Result<Self, Self::Error> {
@@ -117,7 +165,11 @@ impl TryFrom<CertPaths> for Chain {
     }
 }
 
-// Function used to write provided cert into desired directory.
+/// Write a certificate to a file in the specified encoding format.
+///
+/// The filename is derived from the certificate type and encoding
+/// (e.g., `vcek.pem`, `ark.der`). For VLEK endorsement with an ASK
+/// cert type, the file is named `asvk`.
 pub fn write_cert(
     path: &Path,
     cert_type: &CertType,
@@ -164,17 +216,26 @@ pub fn write_cert(
     Ok(())
 }
 
+/// CLI arguments for the `certificates` subcommand.
+///
+/// Requests certificates from the hypervisor extended memory via the AMD
+/// Secure Processor and stores them in the specified directory.
 #[derive(Parser)]
 pub struct CertificatesArgs {
-    /// Specify encoding to use for certificates.
+    /// Certificate encoding format (PEM or DER).
     #[arg(value_name = "encoding", required = true, ignore_case = true)]
     pub encoding: CertFormat,
 
-    /// Directory to store certificates in. Required if requesting an extended-report.
+    /// Directory to store the certificates in. Created if it does not exist.
     #[arg(value_name = "certs-dir", required = true)]
     pub certs_dir: PathBuf,
 }
 
+/// Request extended certificates from the AMD Secure Processor and write them to disk.
+///
+/// Uses `SNP_GET_EXT_REPORT` to obtain certificates cached in the hypervisor
+/// extended memory. Each certificate is written to the specified directory in the
+/// chosen encoding format.
 pub fn get_ext_certs(args: CertificatesArgs) -> Result<()> {
     let mut sev_fw: Firmware = Firmware::open().context("failed to open SEV firmware device.")?;
 
