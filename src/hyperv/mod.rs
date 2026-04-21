@@ -1,5 +1,17 @@
 // SPDX-License-Identifier: Apache-2.0
-// This file contains code related to Hyper-V integration (Hypervisor). It provides a flag (`hyperv::present`) indicating whether the SNP Guest is running within a Hyper-V guest environment.
+
+//! Hyper-V detection and vTPM-based attestation report retrieval.
+//!
+//! On Microsoft Azure Confidential VMs with SEV-SNP isolation, the native
+//! `/dev/sev-guest` interface is hidden from the guest OS by the OpenHCL
+//! paravisor. Instead, attestation reports are pre-generated at VMPL 0
+//! and stored in a vTPM NV index (`0x01400001`).
+//!
+//! This module provides:
+//! - [`present()`] — Detect whether the guest is running under Hyper-V
+//!   with SNP isolation (via CPUID checks).
+//! - [`report::get()`] — Retrieve the pre-generated attestation report
+//!   from the vTPM.
 
 use super::*;
 
@@ -28,6 +40,14 @@ const RSV2_SIZE: usize = size_of::<u32>() * 5;
 const TOTAL_SIZE: usize = RSV1_SIZE + REPORT_SIZE + RSV2_SIZE;
 const REPORT_RANGE: std::ops::Range<usize> = RSV1_SIZE..(RSV1_SIZE + REPORT_SIZE);
 
+/// Detect whether the guest is running under Hyper-V with SEV-SNP isolation.
+///
+/// Checks CPUID leaves for:
+/// 1. Hypervisor presence bit (CPUID 1, ECX bit 31)
+/// 2. "Microsoft Hv" vendor signature
+/// 3. Hyper-V isolation feature (without CPU management — indicating a
+///    hardware-isolated VM rather than a traditional VM)
+/// 4. SNP isolation type
 pub fn present() -> bool {
     let mut cpuid = unsafe { __cpuid(CPUID_PROCESSOR_INFO_AND_FEATURE_BITS) };
     if (cpuid.ecx & CPUID_FEATURE_HYPERVISOR) == 0 {
@@ -73,6 +93,7 @@ pub fn present() -> bool {
     true
 }
 
+/// vTPM-based attestation report retrieval for Hyper-V guests.
 pub mod report {
     use super::*;
 
@@ -86,8 +107,13 @@ pub mod report {
         tcti_ldr::{DeviceConfig, TctiNameConf},
     };
 
+    /// vTPM NV index where the HCL report (containing the attestation report) is stored.
     const VTPM_HCL_REPORT_NV_INDEX: u32 = 0x01400001;
 
+    /// Retrieve the pre-generated attestation report from the vTPM.
+    ///
+    /// The `vmpl` argument is ignored because the report is pre-fetched at
+    /// VMPL 0. A warning is printed if a non-zero VMPL is specified.
     pub fn get(vmpl: u32) -> Result<AttestationReport> {
         if vmpl > 0 {
             eprintln!("Warning: --vmpl argument was ignored because attestation report is pre-fetched at VMPL 0 and stored in vTPM.");
@@ -97,6 +123,7 @@ pub mod report {
         hcl_report(&bytes)
     }
 
+    /// Read the HCL report bytes from the vTPM NV index.
     fn tpm2_read() -> Result<Vec<u8>> {
         let handle = NvIndexTpmHandle::new(VTPM_HCL_REPORT_NV_INDEX)
             .context("unable to initialize TPM handle")?;
@@ -107,6 +134,10 @@ pub mod report {
             .context("unable to read non-volatile vTPM data")
     }
 
+    /// Extract the SNP attestation report from the HCL report format.
+    ///
+    /// The HCL report contains reserved fields, the attestation report
+    /// (1184 bytes), and additional reserved fields.
     fn hcl_report(bytes: &[u8]) -> Result<AttestationReport> {
         if bytes.len() < TOTAL_SIZE {
             return Err(anyhow!(

@@ -1,5 +1,22 @@
 // SPDX-License-Identifier: Apache-2.0
-// This file contains code for checking if the SEV-SNP feature appears enabled in the guest environment.
+
+//! Quick check if the SEV-SNP is enabled.
+//!
+//! This module provides the `ok` subcommand which performs a quick local check
+//! of the guest using features such as CPUID and MSRs (Model-Specific Registers)
+//! to determine whether SEV-SNP appears to be enabled in the guest environment.
+//!
+//! ## `ok`
+//!
+//! ```bash
+//! snpguest ok
+//! ```
+//!
+//! Note that this command is only a sanity check and does not provide a cryptographic
+//! guarantee that the SEV-SNP is definitely valid. To obtain strict cryptographic
+//! assurance for the SEV-SNP, the user must perform remote attestation.
+//!
+//! This command requires the `msr` module.
 
 use super::*;
 
@@ -13,8 +30,11 @@ use serde::{Deserialize, Serialize};
 const SEV_MASK: usize = 1;
 const ES_MASK: usize = 1 << 1;
 const SNP_MASK: usize = 1 << 2;
+
+/// Type alias for test functions that return a [`TestResult`].
 type TestFn = dyn Fn() -> TestResult;
 
+/// A single capability test with optional sub-tests.
 struct Test {
     name: &'static str,
     gen_mask: usize,
@@ -22,12 +42,14 @@ struct Test {
     sub: Vec<Test>,
 }
 
+/// Result of a single capability test.
 struct TestResult {
     name: String,
     stat: TestState,
     mesg: Option<String>,
 }
 
+/// Possible outcomes of a capability test.
 #[derive(PartialEq, Eq)]
 enum TestState {
     Pass,
@@ -36,6 +58,10 @@ enum TestState {
 }
 
 bitfield! {
+    /// Bitfield representing the SEV status MSR (`0xC0010131`).
+    ///
+    /// Each bit indicates whether a specific SEV/SEV-ES/SNP feature
+    /// is enabled in the guest environment.
     #[repr(C)]
     #[derive(Default, Copy, Clone, PartialEq, Eq, Serialize, Deserialize)]
     pub struct SevStatus(u64);
@@ -249,6 +275,10 @@ fn collect_tests() -> Vec<Test> {
 
 const INDENT: usize = 2;
 
+/// Run all SEV-SNP capability tests and report results.
+///
+/// Returns `Ok(())` if all required tests pass, or an error if any fail.
+/// Optional features are reported but do not cause failure.
 pub fn cmd(quiet: bool) -> Result<()> {
     let tests = collect_tests();
 

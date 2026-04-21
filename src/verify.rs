@@ -1,5 +1,92 @@
 // SPDX-License-Identifier: Apache-2.0
-// This file includes subcommands for verifying certificate chains and attestation reports. Submodules `certificate_chain` and `attestation` contain the verification logic for certificates and attestation reports, respectively.
+
+//! Verifies certificate chains and attestation reports.
+//!
+//! This module provide the following subcommands, which performs the verification
+//! of certificate chains and attestation reports.
+//!
+//! - `verify certs` — Verify a certificate chain (ARK → ASK/ASVK → VCEK/VLEK)
+//! - `verify attestation` — Verify an attestation report against a given VCEK/VLEK
+//!   certificate and reference values.
+//!
+//! ## `verify certs`
+//!
+//! ```bash
+//! snpguest verify certs $CERTS_DIR
+//! ```
+//!
+//! This command then verifies that
+//!
+//! - ARK is self-signed
+//! - ASK (or ASVK) is signed by ARK
+//! - VCEK (or VLEK) is signed by ASK (or ASVK)
+//!
+//! An error will be raised if any of the certificates fail verification.
+//!
+//! ### Argument
+//!
+//! | Argument | Description | Default |
+//! | :--      | :--        | :--    |
+//! | `$CERTS_DIR` | The directory where the certificates are stored in. | *required* |
+//!
+//! ### Example
+//!
+//! ```bash
+//! # Verify cert chain stored in ./certs
+//! snpguest verify certs ./certs
+//! ```
+//!
+//! ## `verify attestation`
+//!
+//! ```bash
+//! snpguest verify attestation $CERTS_DIR $ATT_REPORT_PATH [OPTIONS]
+//! ```
+//!
+//! Verifies the attestation report contents and signature using a given VCEK/VLEK
+//! certificate and reference values.
+//!
+//! ### Arguments and Options
+//!
+//! | Argument/Option | Description | Default |
+//! | :--      | :--        | :--    |
+//! | `$CERTS_DIR` | The directory where the leaf certificate is stored in. | *required* |
+//! | `$ATT_REPORT_PATH` | The path of the stored attestation report. | *required* |
+//! | `-p, --processor-model $PROCESSOR_MODEL` | The host processor model (`milan`, `genoa`, `bergano`, `sienna`, `turin`). | - |
+//! | `-t, --tcb` | Skip signature check. | - |
+//! | `-s, --signature` | Skip TCB check. | - |
+//! | `-r, --report-data` | Verify that the REPORT_DATA field in the report matches the given 64-byte data (`0x`-prefixed hex string). | - |
+//! | `-m, --measurement` | Verify that the MEASUREMENT field in the report matches the given 48-byte data (`0x`-prefixed hex string). | - |
+//! | `-d, --host-data` | Verify that the MEASUREMENT field in the report matches the given 32-byte data (`0x`-prefixed hex string). | - |
+//!
+//! The user can specify the host processor model using the `--processor-model`
+//! option. If the processor model is not specified, the command attempts to
+//! infer the host processor model from the report contents. Processor model
+//! autodetection follows the same rules and limitations as the `fetch ca` command.
+//!
+//! ### Example
+//!
+//! ```bash
+//! # Verify Attestation (TCB and signature)
+//! snpguest verify attestation ./certs report.bin
+//!
+//! # Verify TCB only
+//! snpguest verify attestation ./certs report.bin --tcb
+//!
+//! # Verify Signature only
+//! snpguest verify attestation ./certs report.bin --signature
+//!
+//! # Verify TCB, Signature and Report Data
+//! snpguest verify attestation ./certs report.bin \
+//!   --report-data 0x5482c1ffe29145d47cf678f7681e3b64a89909d6cf8ec0104cfacb0b0418f005f564ad14f5c1381c99b74903a780ea340e887c9b445e9c760bf0b74115b26d45
+//!
+//! # Verify TCB, Signature and Measurement
+//! snpguest verify attestation ./certs report.bin \
+//!   --measurement 0xf28aac58964258d8ae0b2e88a706fc7afd0bb524f6a291ac3eedeccb73f89d7cfcf2e4fb6045e7d5201e41d1726afa02
+//!
+//! # Verify TCB, Signature and Host Data
+//! snpguest verify attestation ./certs report.bin \
+//!   --host-data 0x7e4a3f9c1b82a056d39f0d44e5c8a7b1f02394de6b58ac0d7e3c11af0042bd59
+//! ```
 
 use super::*;
 
@@ -18,15 +105,17 @@ use sev::parser::ByteParser;
 
 use hex::FromHex;
 
+/// Subcommands for verifying certificate chains and attestation reports.
 #[derive(Subcommand)]
 pub enum VerifyCmd {
-    /// Verify the certificate chain.
+    /// Verify the certificate chain (ARK self-signed, ASK/ASVK signed by ARK, VCEK/VLEK signed by ASK/ASVK).
     Certs(certificate_chain::Args),
 
-    /// Verify the attestation report.
+    /// Verify the attestation report contents and signature.
     Attestation(attestation::Args),
 }
 
+/// Dispatch to the appropriate verify subcommand handler.
 pub fn cmd(cmd: VerifyCmd, quiet: bool) -> Result<()> {
     match cmd {
         VerifyCmd::Certs(args) => certificate_chain::validate_cc(args, quiet),
@@ -34,7 +123,7 @@ pub fn cmd(cmd: VerifyCmd, quiet: bool) -> Result<()> {
     }
 }
 
-// Find a certificate in specified directory according to its extension
+/// Find a certificate file in the given directory by name, trying `.pem` then `.der` extensions.
 pub fn find_cert_in_dir(dir: &Path, cert: &str) -> Result<PathBuf, anyhow::Error> {
     if dir.join(format!("{cert}.pem")).exists() {
         Ok(dir.join(format!("{cert}.pem")))
@@ -50,14 +139,16 @@ mod certificate_chain {
 
     use super::*;
 
+    /// CLI arguments for `verify certs`.
     #[derive(Parser)]
     pub struct Args {
-        /// Path to directory containing certificate chain."
+        /// Path to directory containing the certificate chain (ARK, ASK/ASVK, VCEK/VLEK).
         #[arg(value_name = "certs-dir", required = true)]
         pub certs_dir: PathBuf,
     }
 
-    // Function to validate certificate chain
+    /// Validate the certificate chain: ARK is self-signed, ASK/ASVK is signed by ARK,
+    /// and VCEK/VLEK is signed by ASK/ASVK.
     pub fn validate_cc(args: Args, quiet: bool) -> Result<()> {
         let ark_path = find_cert_in_dir(&args.certs_dir, "ark")?;
         let (mut vek_type, mut sign_type): (&str, &str) = ("vcek", "ask");
@@ -159,6 +250,9 @@ mod attestation {
         firmware::{guest::AttestationReport, host::CertType},
     };
 
+    /// X.509 OID extensions embedded in the VCEK/VLEK certificate by AMD.
+    /// These are compared against values in the attestation report during
+    /// TCB verification.
     enum SnpOid {
         BootLoader,
         Tee,
@@ -168,7 +262,6 @@ mod attestation {
         Fmc,
     }
 
-    // OID extensions for the VCEK, will be used to verify attestation report
     impl SnpOid {
         fn oid(&self) -> Oid<'static> {
             match self {
@@ -182,41 +275,52 @@ mod attestation {
         }
     }
 
+    /// CLI arguments for `verify attestation`.
+    ///
+    /// By default, both TCB and signature verification are performed.
+    /// Use `-t` to skip signature verification (run only TCB check),
+    /// or `-s` to skip TCB verification (run only signature check).
+    /// Optional report field verification can be requested for
+    /// measurement, host_data, and report_data.
     #[derive(Parser)]
     pub struct Args {
-        /// Path to directory containing VCEK.
+        /// Path to directory containing the VCEK or VLEK certificate.
         #[arg(value_name = "certs-dir", required = true)]
         pub certs_dir: PathBuf,
 
-        /// Path to attestation report to use for validation.
+        /// Path to the attestation report to verify.
         #[arg(value_name = "att-report-path", required = true)]
         pub att_report_path: PathBuf,
 
-        /// Specify the processor model to verify the attestation report.
+        /// Host processor model. If not specified, auto-detected from the report.
         #[arg(short, long, value_name = "processor-model", ignore_case = true)]
         pub processor_model: Option<ProcType>,
 
-        /// Run the TCB Verification Exclusively.
+        /// Verify TCB only (skip signature verification). Conflicts with `--signature`.
         #[arg(short, long, conflicts_with = "signature")]
         pub tcb: bool,
 
-        /// Run the Signature Verification Exclusively.
+        /// Verify signature only (skip TCB verification). Conflicts with `--tcb`.
         #[arg(short, long, conflicts_with = "tcb")]
         pub signature: bool,
 
-        /// Optional measurement string (hex, 48 bytes / 96 chars)
+        /// Expected MEASUREMENT value to verify against the report (0x-prefixed hex string, 48 bytes / 96 hex chars).
         #[arg(short, long, value_name = "measurement")]
         pub measurement: Option<String>,
 
-        /// Optional host_data string (hex, 32 bytes / 64 chars)
+        /// Expected HOST_DATA value to verify against the report (0x-prefixed hex string, 32 bytes / 64 hex chars).
         #[arg(short = 'd', long, value_name = "host_data")]
         pub host_data: Option<String>,
 
-        /// Optional report_data string (hex, 64 bytes / 128 chars)
+        /// Expected REPORT_DATA value to verify against the report (0x-prefixed hex string, 64 bytes / 128 hex chars).
         #[arg(short, long, value_name = "report_data")]
         pub report_data: Option<String>,
     }
 
+    /// Verify the attestation report signature using the VEK (VCEK/VLEK) public key.
+    ///
+    /// Computes a SHA-384 digest over the signed portion of the report (bytes 0x0..0x2A0)
+    /// and verifies the ECDSA signature against the VEK's public key.
     fn verify_attestation_signature(
         vcek: Certificate,
         att_report: AttestationReport,
@@ -255,7 +359,10 @@ mod attestation {
         Ok(())
     }
 
-    // Check the cert extension byte to value
+    /// Compare an X.509 extension value against an expected byte slice.
+    ///
+    /// Handles three encoding formats: ASN.1 integer (type 0x2),
+    /// ASN.1 octet string (type 0x4), and legacy raw byte format.
     fn check_cert_bytes(ext: &X509Extension, val: &[u8]) -> bool {
         match ext.value[0] {
             // Integer
@@ -292,6 +399,7 @@ mod attestation {
         }
     }
 
+    /// Extract the certificate type from the X.509 Subject Common Name field.
     fn parse_common_name(field: &X509Name<'_>) -> Result<CertType> {
         if let Some(val) = field
             .iter_common_name()
@@ -313,6 +421,11 @@ mod attestation {
         }
     }
 
+    /// Verify that REPORTED_TCB fields in the attestation report match the
+    /// corresponding OID extension values in the VEK certificate.
+    ///
+    /// Checks: bootloader, TEE, SNP, microcode, CHIP_ID (VCEK only),
+    /// and FMC (Turin only).
     fn verify_attestation_tcb(
         vcek: Certificate,
         att_report: AttestationReport,
@@ -423,6 +536,13 @@ mod attestation {
         Ok(())
     }
 
+    /// Main entry point for attestation report verification.
+    ///
+    /// By default, runs both TCB and signature checks. When `--tcb` is set,
+    /// only TCB verification runs (signature check is skipped). When `--signature`
+    /// is set, only signature verification runs (TCB check is skipped).
+    /// If optional reference values are provided (`--measurement`, `--host-data`,
+    /// `--report-data`), those report fields are verified as well.
     pub fn verify_attestation(args: Args, quiet: bool) -> Result<()> {
         // Get attestation report
         let att_report = if !args.att_report_path.exists() {
@@ -469,8 +589,15 @@ mod attestation {
         Ok(())
     }
 
+    /// Decode an input string as a byte vector.
+    ///
+    /// If the input starts with `0x`, it is treated as a hex-encoded string.
+    /// Otherwise, the raw UTF-8 bytes of the input are used.
+    ///
+    /// **Note**: Despite the name, the non-hex path converts the string to
+    /// raw UTF-8 bytes rather than parsing it as a decimal number. See
+    /// <https://github.com/virtee/snpguest/issues/135> for details.
     fn decode_hex_or_decimal(input: &str) -> Result<Vec<u8>> {
-        // Look for "0x" at beginning. If it exists, treat as a hex.
         if let Some(hex_str) = input.strip_prefix("0x") {
             Ok(Vec::from_hex(hex_str)?)
         } else {
@@ -478,6 +605,7 @@ mod attestation {
         }
     }
 
+    /// Verify that a report field matches the user-provided reference value.
     fn verify_field(
         field_name: &str,
         expected: &[u8],
@@ -511,6 +639,8 @@ mod attestation {
         Ok(())
     }
 
+    /// Verify optional report fields (measurement, host_data, report_data)
+    /// against user-provided reference values.
     fn verify_report_fields(
         args: &Args,
         att_report: &AttestationReport,
