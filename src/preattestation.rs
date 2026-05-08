@@ -421,8 +421,7 @@ mod keydigest {
         }
 
         if !quiet {
-            println!("Key Digest:");
-            println!("{}", key_digest_string);
+            println!("0x{}", key_digest_string);
         }
         Ok(())
     }

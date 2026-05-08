@@ -215,6 +215,14 @@ mod attestation {
         /// Optional report_data string (hex, 64 bytes / 128 chars)
         #[arg(short, long, value_name = "report_data")]
         pub report_data: Option<String>,
+
+        /// Optional id_key_digest string (hex, 48 bytes / 96 chars)
+        #[arg(long, value_name = "id_key_digest")]
+        pub id_key_digest: Option<String>,
+
+        /// Optional author_key_digest string (hex, 48 bytes / 96 chars)
+        #[arg(long, value_name = "author_key_digest")]
+        pub author_key_digest: Option<String>,
     }
 
     fn verify_attestation_signature(
@@ -462,7 +470,12 @@ mod attestation {
         }
 
         // Verify optional fields if provided
-        if args.measurement.is_some() || args.host_data.is_some() || args.report_data.is_some() {
+        if args.measurement.is_some()
+            || args.host_data.is_some()
+            || args.report_data.is_some()
+            || args.id_key_digest.is_some()
+            || args.author_key_digest.is_some()
+        {
             verify_report_fields(&args, &att_report, quiet)?;
         }
 
@@ -540,6 +553,24 @@ mod attestation {
                 att_report.report_data.as_slice(),
                 report,
                 64,
+                quiet,
+            )?;
+        }
+        if let Some(idk) = &args.id_key_digest {
+            verify_field(
+                "ID Key Digest",
+                att_report.id_key_digest.as_slice(),
+                idk,
+                48,
+                quiet,
+            )?;
+        }
+        if let Some(ak) = &args.author_key_digest {
+            verify_field(
+                "Author Key Digest",
+                att_report.author_key_digest.as_slice(),
+                ak,
+                48,
                 quiet,
             )?;
         }
