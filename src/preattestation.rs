@@ -55,7 +55,8 @@ mod measurement {
 
         /// Type of guest vcpu (EPYC, EPYC-v1, EPYC-v2, EPYC-IBPB, EPYC-v3, EPYC-v4,
         /// EPYC-Rome, EPYC-Rome-v1, EPYC-Rome-v2, EPYC-Rome-v3, EPYC-Milan, EPYC-
-        /// Milan-v1, EPYC-Milan-v2, EPYC-Genoa, EPYC-Genoa-v1)
+        /// Milan-v1, EPYC-Milan-v2, EPYC-Genoa, EPYC-Genoa-v1, EPYC-Turin,
+        /// EPYC-Turin-v1, EPYC-Turin-v2)
         #[arg(long, value_name = "vcpu-type", 
             conflicts_with_all = ["vcpu_sig", "vcpu_family", "vcpu_model", "vcpu_stepping"], 
             required_unless_present_any(["vcpu_sig", "vcpu_family", "vcpu_model", "vcpu_stepping"],
