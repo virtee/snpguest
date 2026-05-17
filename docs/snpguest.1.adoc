@@ -14,13 +14,13 @@ SYNOPSIS
 
 DESCRIPTION
 -----------
-snpguest is a CLI utility for navigating and interacting with the AMD SEV-SNP
-guest firmware device of a guest system.
+snpguest is a CLI utility for navigating and interacting with the AMD SEV-SNP guest firmware device of a guest system.
 
 
 GLOBAL OPTIONS
 --------------
-*-q, --quiet*:: Don't print any output to the console.
+*-q, --quiet*::
+    Don't print any output to the console.
 
 
 COMMANDS
@@ -28,137 +28,155 @@ COMMANDS
 *snpguest report*::
     usage: snpguest report $ATT_REPORT_PATH $REQUEST_FILE [-v, --vmpl] $VMPL [-r, --random] [-p, --platform]
 
-    Requests an attestation report from the host and writes it in a file with the provided request data and vmpl.
-    Will write the contents of the attestation report in binary format into the specified report path.
-    A path for the attestation report must be provided.
-    User can pass 64 bytes of data in raw binary format into $REQUEST_FILE in order to use that data to request the attestation report.
-    The user can use the --random flag to generate and use random data for request data.
-    For Microsoft Hyper-V guests, a user can use the --platform flag to use the request data that was pre-generated
-    from the platform. Currently, for Hyper-V guests, --platform is required, as there is no ability to write
-    request data for the attestation report.
-    If --random is used, the random data was will be written in raw bytes into $REQUEST_FILE, instead of reading from that file.
-    For Microsoft Hyper-V guests, a user can use the --platform flag to use the request data that was pre-generated
-    from the platform. Currently, for Hyper-V guests, --platform is required, as there is no ability to write
-    request data for the attestation report.
-    The pre-generated data will be taken from the platform attestation report and then written in raw byte format into $REQUEST_FILE.
-    VMPL is an optional parameter and it defaults to 1.
+    Requests an attestation report from the AMD Secure Processor (ASP), and writes it to $ATT_REPORT_PATH as raw binary. This command is a wrapper of the SNP_GUEST_REQUEST(MSG_REPORT_REQ) ioctl.
+    Without [-p, --platform] or [-r, --random], the user can pass 64 bytes of data in any file format into $REQUEST_FILE to request an attestation report. The request file is interpreted as raw binary, and the first 64 bytes of the binary are sent to the AMD-SP as the request data. The request data will be bound to the REPORT_DATA field in the attestation report.
+    With the [-r, --random] flag, this command generates a random data for the request, which will be written into $REQUEST_FILE.
+    The [-v, --vmpl] option specifies the Virtual Machine Privilege Level (VMPL) to request an attestation report (0-3). The default value is 1. This value must be greater than or equal to the current VMPL. Specifying a privilege level higher than the actual level (smaller VMPL value) will result in a firmware error.
+    With the [-p, --platform] flag, this command retrieves an attestation report from vTPM instead of the ASP, and writes the Report Data field in the retrieved report into $REQUEST_FILE. This attestation route is available (and mandatory) on Microsoft Azure Confidential VMs with SEV-SNP isolation. This flag requires the `hyperv` feature. Currently, only the pre-generated attestation report can be retrieved with this command.
+
+    arguments:
+    $ATT_REPORT_PATH: Specifies the path where the attestation report would be stored.
+    $REQUEST_FILE: Specifies the path to the 64-byte request file to pass as Report Data in the request. Or where the data will be stored if the -r or -p flags are used.
 
     options:
-    -h, --help  show a help message.
-    -p, --platform Use platform generated 64 bytes of data to pass for the report request (Only available for Hyper-V).
-    -r, --random  Generate 64 random bytes of data to pass for the report request (Not available for Hyper-V).
-    -v, --vmpl Specify a different vmpl level for the attestation report (defaults to 1).
+    -h, --help: show a help message.
+    -v, --vmpl: specify the VMPL value to put in the attestation report (0-3). The default value is 1. Must be greater than or equal to the current VMPL.
+    -r, --random: Generate 64 random bytes of data for the report request.
+    -p, --platform: Get an attestation report from the vTPM NV index (Only available for Azure CVMs).
 
 *snpguest certificates*::
     usage: snpguest certificates $ENCODING $CERTS_DIR
 
-    Requests the certificate chain (ASK, ARK & VCEK) from host memory (requests extended-config).
-    The user needs to specify the certificate encoding they would like store the certs in [PEM | DER].
-    Currently only PEM and DER encondings are supported.
-    All of the certs will be in the same encoding.
-    The user also needs to provide the path to the directory where the certs will be stored.
-    If the certificate already exists in the provided directory, it will be overwritten.
-    The attestation report will be ingored for this request, to request and store an attestation report use the "report" command.
+    Requests the certificates from the hypervisor memory via the ASP, and writes it into $CERTS_DIR as $ENCODING format (PEM or DER). This command uses the SNP_GET_EXT_REPORT ioctl of the ASP.
+    The output depends on which certificates are cached in the hypervisor memory. Before executing this command, the host (platform owner) must fetch certificates from AMD KDS and load them into the extended configuration. Should no certificates be loaded, this command will causes a SEV-SNP guest firmware error.
+    In principle, the host can cache any certificate. However, in practice, it typically caches only the leaf certificate (VCEK or VLEK) or the entire certificate chain.
+    Note that this feature is not supported in upstream kernels. Actual behavior also depends on the kernel version.
+
+    arguments:
+    $ENCODING: Specify the certificate encoding to store the certificates in (PEM or DER).
+    $CERTS_DIR: Specify the directory to store the certificates in.
 
     options:
-    -h, --help  show a help message
+    -h, --help: show a help message
 
 *snpguest fetch ca*::
-    usage: snpguest fetch ca $ENCODING $CERTS_DIR $PROCESSOR_MODEL [-r, --report] $ATT_REPORT_PATH [-E --endorser] $ENDORSEMENT
+    usage: snpguest fetch ca $ENCODING $CERTS_DIR $PROCESSOR_MODEL [-r, --report] $ATT_REPORT_PATH [-e, --endorser] $ENDORSEMENT
 
-    Requests the certificate authority chain (ARK & ASK) from the KDS.
-    The user needs to specify the certificate encoding they would like to store the certs in [PEM | DER].
-    Currently, only PEM and DER encodings are supported.
-    Both certificates will be in the same encoding.
-    The user needs to provide the path to the directory where the certs will be stored.
-    If the certificates already exist in the provided directory, they will be overwritten.
-    The user must either pass a V3 attestation report or manually specify the host processor model using the --processor_model flag.
-    This ensures the correct CA certificates for attestation are retrieved from the KDS. [Milan | Genoa | Bergamo | Siena | Turin]
-    Lastly, the user may specify the endorser they would like the CA chain for using the --endorser flag. [VCEK | VLEK]
-    It will default to VCEK.
+    Fetches the AMD root CA certificate (ARK) and the AMD intermediate certificate (ASK for VCEK or ASVK for VLEK) from the AMD KDS, and writes them into $CERTS_DIR in $ENCODING format (PEM or DER).
+    The user must specify either the host processor model $PROCESSOR_MODEL (milan, genoa, bergano, sienna, turin` or the path to an attestation report using the [-r, --report] option. When the report is provided, the command attempts to infer the host processor model from the report. Autodetection succeeds only when the report version is 3 or later and both CPU_FAM_ID and CPU_MOD_ID are present. In Report Version 2, automatic detection uses heuristics.
+    The [-e, --endorser] option specifies the type of  attestation signing key (VCEK or VLEK). The default value is VCEK.
+
+    arguments:
+    $ENCODING: Specify the certificate encoding to store the certificates in (PEM or DER).
+    $CERTS_DIR: Specify the directory to store the certificates in.
+    $PROCESSOR_MODEL: Specify the host processor model (conflict with --report).
 
     options:
-    -h, --help show a help message
-    -p, -processor_model Specify processor model to retrieve the CA certificates for.
-    -e, --enodorse  Specify the endorser type to get the Ca certificates for. (defaults to: VCEK)
+    -h, --help: show a help message
+    -r, --report: Specify the attestation report to detect the host processor model (conflict with $PROCESSOR_MODEL).
+    -e, --endorser: Specify the endorser type, possible values: "vcek", "vlek" (default: "vcek").
 
 *snpguest fetch vcek*::
-    usage: snpguest fetch vcek $ENCODING $CERTS_DIR $ATT_REPORT_PATH [-p, --processor_model] $PROCESSOR_MODEL
+    usage: snpguest fetch vcek $ENCODING $CERTS_DIR $ATT_REPORT_PATH [-p, --processor-model] $PROCESSOR_MODEL
 
-    Requests the VCEK certificate from the KDS.
-    The user needs to specify the certificate encoding they would like store the cert in [PEM | DER].
-    Currently only PEM and DER encondings are supported.
-    The user needs to provide the path to the directory where the VCEK will be stored.
-    If the certificate already exists in the provided directory, it will be overwritten.
-    The user must either pass a V3 attestation report or manually specify the host processor model using the --processor_model flag.
-    This ensures the correct VCEK certificate for attestation is retrieved from the KDS. [Milan | Genoa | Bergamo | Siena | Turin]
+    Fetches the VCEK certificate from the AMD KDS, and write it into $CERTS_DIR in $ENCODING format (PEM or DER).
+    The user must provide the path to an attestation report $ATT_REPORT_PATH to get the REPORTED_TCB and CHIP_ID.
+    The user can specify the host processor model using the [-p, --processor-model] option. If the processor model is not specified, the command attempts to infer the host processor model from the report contents. Autodetection follows the same rules and limitations as the "fetch ca" command.
+
+    arguments:
+    $ENCODING: Specify the certificate encoding to store the certificates in (PEM or DER).
+    $CERTS_DIR: Specify the directory to store the certificates in.
+    $ATT_REPORT_PATH: Specify the path of the stored attestation report.
 
     options:
-    -h, --help show a help message
-    -p, --processor_model Specify processor model to retrieve the VCEK certificates for.
+    -h, --help: show a help message
+    -p, --processor-model: Specify the host processor model.
 
-*snpguest guest verify certs*::
+*snpguest fetch crl*::
+    usage: snpguest fetch crl $ENCODING $CERTS_DIR $PROCESSOR_MODEL [-r, --report] $ATT_REPORT_PATH [-e, --endorser] $ENDORSEMENT
+
+    Fetches the Certificate Revocation List (CRL) from the AMD KDS, and writes it into $CERTS_DIR in $ENCODING format (PEM or DER). This command has completely the same interface as the "fetch ca" command.
+
+    arguments:
+    $ENCODING: Specify the encoding to store the CRL in (PEM or DER).
+    $CERTS_DIR: Specify the directory to store the CRL in.
+    $PROCESSOR_MODEL: Specify the host processor model (conflict with --report).
+
+    options:
+    -h, --help: show a help message
+    -r, --report: Specify the attestation report to detect the host processor model (conflict with $PROCESSOR_MODEL).
+    -e, --endorser: Specify the endorser type, possible values: "vcek", "vlek" (default: "vcek").
+
+
+*snpguest verify certs*::
     usage: snpguest verify certs $CERTS_DIR
 
-    Verifies that the provided certificate chain has been properly signed by each certificate.
-    The user needs to provide a directory were all 3 of the certificates are stored (ARK,ASK and VCEK).
-    Error will be raised if any of the certificates fails verification.
+    Verifies that the provided certificate chain in $CERTS_DIR has been properly signed by each certificate.
+    The user need to provide all three certificates in $CERTS_DIR, namely, the VCEK chain (ark, ask and vcek) or the VLEK chain (ark, asvk and vlek).
+    An error will be raised if any of the certificates fail verification.
+
+    argument:
+    $CERTS_DIR: Specify the directory where the certificates are stored in. 
 
     options:
-    -h, --help show a help message
+    -h, --help: show a help message
 
 *snpguest verify attestation*::
-    usage: snpguest verify attestation $CERTS_DIR $ATT_REPORT_PATH [-p, --processor_model] $PROCESSOR_MODEL [-t, --tcb] [-s, --signature]
+    usage: snpguest verify attestation $CERTS_DIR $ATT_REPORT_PATH [-p, --processor-model] $PROCESSOR_MODEL [-t, --tcb] [-s, --signature] [-m, --measurement] $MEASUREMENT [-d, --host-data] $HOST_DATA [-r, --report-data] $REPORT_DATA
 
-    Verifies the contents of the Attestation Report using a VEK certificate.
-    The user needs to provide the path to the directory containing the VEK certificate.
-    The tool will automatically recognize whether it's a VLEK or VCEK.
-    If both a VLEK and a VCEK are in the directory, then the VCEK will be used.
-    The user also needs to provide the path to a stored attestation report to be verified.
-    If the report is not version 3 or newer, then the user can specify the cpu model to verify using the --processor_model flag.
-    If no processor model is passed, and the report is a version 2, then the verification will be treated as a Genoa or older verification.
+    Verifies the contents of the Attestation Report using the VCEK/VLEK certificate.
+    The user needs to provide the path to the directory containing the VCEK/VLEK certificate and the path to a stored attestation report to be verified.
     An error will be raised if the attestation verification fails at any point.
-    The user can use the [-t, --tcb] flag to only validate the tcb contents of the report.
-    The user can use the [-s, --signature] flag to only validate the report signature.
-    The user can use the [-m, --measurement] flag to verify that the measurement in the attestation 
-    report matches the expected measurement value (prefix with 0x for hex, without prefix it assumes 
-    decimal values).
-    The user can use the [-d, --host-data] flag to verify that the host-data in the attestation 
-    report matches the expected host-data value (prefix with 0x for hex, without prefix it assumes 
-    decimal values).
-    The user can use the [-r, --report-data] flag to verify that the report-data in the attestation 
-    report matches the expected report-data value (prefix with 0x for hex, without prefix it assumes 
-    decimal values).
-    If the optional flags are not passed, just the signature will be verified.
+    The user can specify the host processor model using the [-p, --processor-model] option. If the processor model is not specified, the command attempts to infer the host processor model from the report contents.
+    The user can use the [-t, --tcb] flag to skip the signature validation.
+    The user can use the [-s, --signature] flag to skip the reported TCB validation.
+    The user can use the [-m, --measurement] flag to verify that the measurement in the attestation report matches the expected measurement value (prefix with 0x for hex).
+    The user can use the [-d, --host-data] flag to verify that the host-data in the attestation report matches the expected host-data value (prefix with 0x for hex).
+    The user can use the [-r, --report-data] flag to verify that the report-data in the attestation report matches the expected report-data value (prefix with 0x for hex).
 
+    arguments:
+    $CERTS_DIR: Specify the directory where the certificates are stored in. 
+    $ATT_REPORT_PATH: Specify the path of the stored attestation report.
+    
     options:
-    -h, --help show a help message
-    -p, --processor_model Specify the processor model to use for verification
-    -t, --tcb verify the tcb section of the report only
-    -s, --signature verify the signature of the report only
-    -m, --measurement provide an expected measurement to verify the measurement field in the attestation report
-    -d, --host-data provide the expected host-data to verify the host-data field in the attestation report
-    -r, --report-data provide the expected report-data to verify the report-data in the attestation report
+    -h, --help: show a help message
+    -p, --processor-model: Specify the host processor model.
+    -t, --tcb: Skip the signature validation
+    -s, --signature: Skip the reported TCB validation
+    -m, --measurement: provide an expected measurement to verify the measurement field in the attestation report
+    -d, --host-data: provide the expected host-data to verify the host-data field in the attestation report
+    -r, --report-data: provide the expected report-data to verify the report-data in the attestation report
 
 *snpguest key*::
-    usage: snpguest key $KEY_PATH $ROOT_KEY_SELECT [-g, --guest_field_select] [-s, --guest_svn] [-t, --tcb_version] [-v, --vmpl]
+    usage: snpguest key $KEY_PATH $ROOT_KEY_SELECT [-v, --vmpl] $VMPL [-g, --guest_field_select] $GFS [-s, --guest_svn] $GSVN [-t, --tcb_version] $TCBV [-l, --launch_mit_vector] $LMV
 
-    Creates the derived key based on input parameters and stores it.
-    $KEY_PATH is the path to store the derived key.
-    $ROOT_KEY_SELECT is the root key from which to derive the key. Input either "vcek" or "vmrk".
-    The --guest_field_select option specifies which Guest Field Select bits to enable. It is a 6 digit binary string. For each bit, 0 denotes off and 1 denotes on.
-    The least significant (rightmost) bit is Guest Policy followed by Image ID, Family ID, Measurement, SVN, TCB Version which is the most significant (leftmost) bit.
-     example: snpguest key $KEY_PATH $ROOT_KEY_SELECT --guest_field_select 100001 (Denotes Guest Policy:On, Image ID:Off, Family ID:Off, Measurement:Off, SVN:Off, TCB Version:On)
-    The --guest_svn specifies the guest SVN to mix into the key. Must not exceed the guest SVN provided at launch in the ID block.
-    The --tcb_version specified the TCB version to mix into the derived key. Must not exceed CommittedTcb.
+    Requests the derived key from the AMD-SP based on input parameters, and stores it into $KEY_PATH. This command is a wrapper of the SNP_GUEST_REQUEST(MSG_KEY_REQ) ioctl of the AMD-SP.
+    The user must specifies the root key $ROOT_KEY_SELECT from which to derive the key (either "vcek" or "vmrk").
+    The [-g, --guest_field_select] option is a bit field of length 64, which specifies which data field will be mixed into the derived key. Each of the bits from right to left correspond to Guest Policy, Image ID, Family ID, Measurement, SVN and TCB Version, Launch Mitigation Vector, respectively. For each bit, 0 denotes off, and 1 denotes on.
+    The [-v, --vmpl] option specifies the VMPL value to mix into the key (0-3). The default value is 1. This value must be greater than or equal to the current VMPL. Specifying a privilege level higher than the actual level (smaller VMPL value) will result in a firmware error.
+    The [-g, --guest_svn] option specifies the guest SVN to mix into the key.
+    The [-t, --tcb_version] option specifies the TCB version to mix into the derived key (must not exceed the committed TCB)
+    The [-l, --launch_mit_vector] option specifies the launch mitigation vector value to mix into the derived key.
+    Note that the launch mitigation vector is only available for the MSG_KEY_REQ message version 2 or later.
 
+    arguments:
+    $KEY_PATH: Specify the path to store the derived key.
+    $ROOT_KEY_SELECT: Specify the root key from which to derive the key (either "vcek" or "vmrk").
 
     options:
-    -h, --help show a help message
-    -g, --guest_field_select      Specify which Guest Field Select bits to enable.
-    -s, --guest_svn                Specify the guest SVN to mix into the key.
-    -t, --tcb_version               Specify the TCB version to mix into the derived key.
-    -v, --vmpl                      Specify VMPL level the Guest is running on. Defaults to 1.
+    -h, --help: show a help message
+    -v, --vmpl: specify the VMPL value to mix into the key (0-3). The default value is 1. Must be greater than or equal to the current VMPL.
+    -g, --guest_field_select: Specify which Guest Field Select bits to enable as a 64-bit integer (decimal, prefixed hex or prefixed bin) (default: 0).
+    -s, --guest_svn: Specify the guest SVN to mix into the key (decimal, prefixed hex or prefixed bin) (default: 0).
+    -t, --tcb_version: Specify the TCB version to mix into the derived key (decimal, prefixed hex or prefixed bin) (default: 0). Must not exceed the commited TCB.
+    -l, --launch_mit_vector: Specify the launch mitigation vector value to mix into the derived key (decimal, prefixed hex or prefixed bin). Only available for MSG_KEY_REQ message version 2 or later.
+
+*snpguest ok*::
+	usage: snpguest ok
+
+    Performs a quick local check such as CPUID and MSRs (Model Specific Registers) to see if the SEV-SNP feature appears enabled in the guest environment.
+    Note that this command is only a sanity check and does not provide a cryptographic guarantee that the SEV-SNP is definitely valid. To obtain strict cryptographic assurance for the SEV-SNP, the user must perform remote attestation.
+    This command requires that the `msr` module is loaded.
 
 *snpguest generate measurement*::
     usage: snpguest generate measurement [-v, --vcpus] [--vcpu-type] [--vcpu-sig] [--vcpu-family] [--vcpu-model] [--vcpu-stepping] [-t, --vmm-type] [-o ,--ovmf] [-k, --kernel]
@@ -172,103 +190,114 @@ COMMANDS
         - [--vcpu-sig] The signature of the vcpu-type used to launch the secure guest
         - [--vcpu-family] [--vcpu-model] [--vcpu-stepping] The family, model and stepping of the vcpu used to launch the secure guest.
             Family, model and stepping have to be used together, if they're not all provided together an error will be raised.
-    If the user provides the [-k, --kernel] parameter to calculate the measurement, they also need to provide [-i, --initrd] and [-a, --append].
+    If the user specifies the [-k, --kernel] parameter to calculate measurements, they can also specify [-i, --initrd] and [-a, --append]. These parameters are unnecessary if the kernel file already contains initrd and append.
     There were kernel features added that affect the result of the measurement if those are enabled. With the [-g, --guest-features] parameter the user can provide which of this features are enabled in their kernel.
     The [-g, --guest-features] can be a hex or decimal number that cover the features enabled.
-    For information on the guest-features bitfield checkout: https://github.com/virtee/sev/blob/a3c91d7b6e742c1b5685a7e0c1e5464819527b06/src/measurement/vmsa.rs#L139
+    For information on the guest-features bitfield checkout: https://github.com/virtee/sev/blob/main/src/measurement/vmsa.rs
     A user can use a pre-calculated ovmf-hash using [--ovmf-hash], but the ovmf file still has to be provided.
-    The calculated measurement will be printed in the console, if the user wishes to store the measurement value they can provide a file path with [-m, --measurement-file] and the measurement will get written there.
+    The calculated measurement will be printed in the console. If the user wishes to store the measurement value they can provide a file path with [-m, --measurement-file] and the measurement will get written there.
     If the [--quiet] flag is used, nothing will be printed out.
 
     options:
-    -h, --help  Show a help message
-    -v, --vcpus  Number of guest vcpus [default: 1]
-    --vcpu-type  Type of guest vcpu (EPYC, EPYC-v1, EPYC-v2, EPYC-IBPB, EPYC-v3, EPYC-v4, EPYC-Rome, EPYC-Rome-v1, EPYC-Rome-v2, EPYC-Rome-v3, EPYC-Milan, EPYC- Milan-v1, EPYC-Milan-v2, EPYC-Genoa, EPYC-Genoa-v1)
+    -h, --help      Show a help message
+    -v, --vcpus     Number of guest vcpus [default: 1]
+    --vcpu-type     Type of guest vcpu (EPYC, EPYC-v1, EPYC-v2, EPYC-IBPB, EPYC-v3, EPYC-v4, EPYC-Rome, EPYC-Rome-v1, EPYC-Rome-v2, EPYC-Rome-v3, EPYC-Milan, EPYC- Milan-v1, EPYC-Milan-v2, EPYC-Genoa, EPYC-Genoa-v1)
     --vcpu-sig  Guest vcpu signature value
-    --vcpu-family  Guest vcpu family
-    --vcpu-model  Guest vcpu model
-    --vcpu-stepping  Guest vcpu stepping
+    --vcpu-family   Guest vcpu family
+    --vcpu-model    Guest vcpu model
+    --vcpu-stepping Guest vcpu stepping
     -t, --vmm-type  Type of guest vmm (QEMU, ec2, KRUN) [default: QEMU]
-    -o, --ovmf  OVMF file to calculate measurement from
-    -k, --kernel  Kernel file to calculate measurement from
-    -i, --initrd  Initrd file to calculate measurement from
-    -a, --append  Kernel command line in string format to calculate measurement from
-    -g, --guest-features  Hex representation of the guest kernel features expected to be included [default: 0x1]
-    --ovmf-hash  Precalculated hash of the OVMF binary
-    -f, --output-format  Output format (base64, hex). [default: hex]
-    -m, --measurement-file Optional file path where the measurement value can be stored in
+    -o, --ovmf      OVMF file to calculate measurement from
+    -k, --kernel    Kernel file to calculate measurement from
+    -i, --initrd    Initrd file to calculate measurement from
+    -a, --append    Kernel command line in string format to calculate measurement from
+    -g, --guest-features    Hex representation of the guest kernel features expected to be included [default: 0x1]
+    --ovmf-hash Precalculated hash of the OVMF binary
+    -f, --output-format Output format (base64, hex). [default: hex]
+    -m, --measurement-file  Optional file path where the measurement value can be stored in
 
 *snpguest generate ovmf-hash*::
     usage: snpguest generate ovmf-hash [-o, --ovmf] [-f, --output--format] [--hash-file]
 
     Calculates the hash of an ovmf file.
-    User only needs to provide the file they want the hash for.
-    The hash will be printed in the console, if the user wishes to store the hash value they can provide a file path with [--hash-file] and the hash will get written there.
-    If the [--quiet] flag is used, nothing will be printed out.
+    The user must specify the OVMF file using the [-o, --ovmf] option.
+    The user can specify the output format using the [-f, --output-format] option: "hex" or "base64" (default: "hex").
+    The hash will be printed in the console. If the user wishes to store the hash value they can provide a file path with [--hash-file] and the hash will get written there.
+    If the global [-q, --quiet] flag is used, nothing will be printed out.
 
     options:
-    -h, --help  Show a help message
-    -o, --ovmf  OVMF file to generate hash for
-    -f, --output-format  Output format (base64, hex). [default: hex]
-    --hash-file Optional file path where the hash value can be stored in
+    -h, --help: Show a help message
+    -o, --ovmf: OVMF file to generate hash for
+    -f, --output-format: Output format (hex, base64). [default: hex]
+    --hash-file: Optional file path where the hash value can be stored in
 
 *snpguest generate id-block*::
-    usage: snpguest generate id-block $ID-BLOCK-KEY $AUTH-KEY $LAUNCH-DIGEST [-f, --family-id] [-m, --image-id] [-v, --version] [-s, --svn] [-p, --policy]
+    usage: snpguest generate id-block $ID_BLOCK_KEY $AUTH_KEY $LAUNCH_DIGEST [-f, --family-id] [-m, --image-id] [-v, --version] [-s, --svn] [-p, --policy]
         [-i, --id-file] [-a, --auth-file]
 
     Calculates an id-block and auth-block for a secure guest.
     User needs to provide a path to two different EC p384 keys in pem or der format. One will be for the id-block the other for the auth-block.
     The user will also need to provide the launch digest (in either hex or base64 format) of the secure guest.
     The user can generate the launch digest using the "generate measurement" command.
-    The user can provide optional id's for further verification using the [-f, --family-id] and [-m, image-id] paramerters.
-    The user can provide the security version number of the guest using [-s, --svn].
-    The user can specify the launch policy of the guest using the [-p, --policy] parameter..
+    The user can provide optional id's for further verification using the [-f, --family-id] and [-m, image-id] paramerters. Each parameter is 16 raw bytes (default: 0s).
+    The user can provide the security version number of the guest using [-s, --svn] (default: 0).
+    The user can specify the launch policy of the guest using the [-p, --policy] parameter.
     The policy can be provided in either hex or decimal format.  It will default to 0x30000.
-    For more information on the guest-policy, you can refer to: https://www.amd.com/content/dam/amd/en/documents/epyc-technical-docs/specifications/56860.pdf#page=27
-    The blocks will be printed in the console, if the user wishes to store the blocks values they can provide a file path with [-i, --id-file] for the id-block
-    and [-a, --auth-file] for the auth-block.
-    If the [--quiet] flag is used, nothing wibe printed out.
+    For more information on the guest-policy, see https://www.amd.com/content/dam/amd/en/documents/developer/56860.pdf
+    The blocks will be printed in the console. If the user wishes to store the blocks values they can provide a file path with [-i, --id-file] for the id-block and [-a, --auth-file] for the auth-block.
+    If the global [-q, --quiet] flag is used, nothing will be printed out.
+
+    arguments:
+    $ID_BLOCK_KEY   The path to the Id-Block key
+    $AUTH_KEY       The path to the Auth-Block key
+    $LAUNCH_DIGEST  Guest launch measurement in either Base64 encoding or hex (if hex prefix with 0x)
 
     options:
-    -h, --help  Show a help message
-    -f, --family-id  Family ID of the guest provided by the guest owner. Has to be 16 characters
+    -h, --help      Show a help message
+    -f, --family-id Family ID of the guest provided by the guest owner. Has to be 16 characters
     -m, --image-id  Image ID of the guest provided by the guest owner. Has to be 16 characters
-    -v, --version  Id-Block version. Currently only version 1 is available
-    -s, --svn  SVN (SECURITY VERSION NUMBER) of the guest
-    -p, --policy  Launch policy of the guest. Can provide in decimal or hex format
-    -i, --id-file Optional file where the Id-Block value can be stored in
+    -v, --version   Id-Block version. Currently only version 1 is available
+    -s, --svn       SVN (SECURITY VERSION NUMBER) of the guest
+    -p, --policy    Launch policy of the guest. Can provide in decimal or hex format
+    -i, --id-file   Optional file where the Id-Block value can be stored in
     -a, --auth-file Optional file where the Auth-Block value can be stored in
 
 *snpguest generate key-digest*::
-    usage: snpguest generate key-digest $KEY-PATH [-d, --key-digest-file]
+    usage: snpguest generate key-digest $KEY_PATH [-d, --key-digest-file]
 
     Generates an SEV key digest for a provided EC p384 key.
-    User needs to provide a path to the key
+    User needs to provide a path to the key.
     The key has to be a EC p384 key in either pem or der format.
-    The digest will be printed in the console, if the user wishes to store the digest value they can provide a file path with [-d, --key-digest-file]
-    If the [--quiet] flag is used, nothing wibe printed out.
+    The digest will be printed in the console. If the user wishes to store the digest value they can provide a file path with [-d, --key-digest-file].
+    If the global [-q, --quiet] flag is used, nothing will be printed out.
 
     options:
-    -h, --help  Show a help message
-    -d, --key-digest-file  File to store the key digest in
+    -h, --help              Show a help message
+    -d, --key-digest-file   File to store the key digest in
 
-*snpguest guest display report*::
+*snpguest display report*::
     usage: snpguest display report $ATT_REPORT_PATH
 
-    Prints the attestation report contents into terminal.
-    The user has to provide a path to a stored attestation report to display.
+    When used for displaying a report, it prints the attestation report contents into the terminal.
+    The user has to provide the path of the stored attestation report to display.
+
+    argument:
+    $ATT_REPORT_PATH    Specify the path of the stored attestation report to display.
 
     options:
-    -h, --help show a help message
+    -h, --help  show a help message
 
-*snpguest guest display key*::
+*snpguest display key*::
     usage: snpguest display key $KEY_PATH
 
-    Prints the derived key contents in hex format into terminal.
+    When used for displaying the fetched derived key's contents, it prints the derived key in hex format into the terminal.
     The user has to provide the path of a stored derived key to display.
 
+    argument:
+    $KEY_PATH   Specify the path of the stored derived key to display.
+
     options:
-    -h, --help show a help message
+    -h, --help  show a help message
 
 *
 
