@@ -152,7 +152,7 @@ pub fn get_processor_model(att_report: AttestationReport) -> Result<ProcType> {
             _ => Err(anyhow::anyhow!("Processor model not supported")),
         },
         0x1A => match cpu_mod {
-            0x0..=0x11 => Ok(ProcType::Turin),
+            0x0..=0x1F => Ok(ProcType::Turin),
             0x50..=0x5F | 0xC0..=0xCF => Ok(ProcType::Venice),
             _ => Err(anyhow::anyhow!("Processor model not supported")),
         },

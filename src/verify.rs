@@ -263,41 +263,42 @@ mod attestation {
         Ok(())
     }
 
-    // Check the cert extension byte to value
-    fn check_cert_bytes(ext: &X509Extension, val: &[u8]) -> bool {
-        match ext.value[0] {
-            // Integer
-            0x2 => {
-                if ext.value[1] != 0x1 && ext.value[1] != 0x2 {
-                    panic!("Invalid octet length encountered!");
-                } else if let Some(byte_value) = ext.value.last() {
-                    byte_value == &val[0]
-                } else {
-                    false
-                }
-            }
-            // Octet String
-            0x4 => {
-                if ext.value[1] != 0x40 {
-                    panic!("Invalid octet length encountered!");
-                } else if ext.value[2..].len() != 0x40 {
-                    panic!("Invalid size of bytes encountered!");
-                } else if val.len() != 0x40 {
-                    panic!("Invalid certificate harward id length encountered!")
-                }
-
-                &ext.value[2..] == val
-            }
-            // Legacy and others.
-            _ => {
-                // Keep around for a bit for old VCEK without x509 DER encoding.
-                if ext.value.len() == 0x40 && val.len() == 0x40 {
-                    ext.value == val
-                } else {
-                    panic!("Invalid type encountered!");
-                }
-            }
+    fn check_cert_tcb(ext: &X509Extension, val: u8) -> bool {
+        if ext.value.first() != Some(&0x02) {
+            panic!("Invalid type encountered!");
         }
+        if ext.value.get(1) != Some(&0x01) && ext.value.get(1) != Some(&0x02) {
+            panic!("Invalid octet length encountered!");
+        }
+        match ext.value.last() {
+            Some(byte_value) => *byte_value == val,
+            None => false,
+        }
+    }
+
+    fn der_octet_string(bytes: &[u8]) -> Option<&[u8]> {
+        if bytes.len() < 2 || bytes[0] != 0x04 {
+            return None;
+        }
+        let len = bytes[1] as usize;
+        if bytes.len() == 2 + len && (len == 0x08 || len == 0x40) {
+            Some(&bytes[2..])
+        } else {
+            None
+        }
+    }
+
+    fn check_hwid_bytes(cert_bytes: &[u8], chip_id: &[u8; 64]) -> bool {
+        let cert_id = der_octet_string(cert_bytes).unwrap_or(cert_bytes);
+        match cert_id.len() {
+            0x08 => cert_id == &chip_id[..8],
+            0x40 => cert_id == chip_id.as_slice(),
+            _ => panic!("Invalid certificate hardware id length encountered!"),
+        }
+    }
+
+    fn check_cert_hwid(ext: &X509Extension, chip_id: &[u8; 64]) -> bool {
+        check_hwid_bytes(ext.value, chip_id)
     }
 
     fn parse_common_name(field: &X509Name<'_>) -> Result<CertType> {
@@ -307,10 +308,10 @@ mod attestation {
             .and_then(|cn| cn.as_str().ok())
         {
             match val.to_lowercase() {
-                x if x.contains("ark") => Ok(CertType::ARK),
-                x if x.contains("ask") | x.contains("sev") => Ok(CertType::ASK),
                 x if x.contains("vcek") => Ok(CertType::VCEK),
                 x if x.contains("vlek") => Ok(CertType::VLEK),
+                x if x.contains("ark") => Ok(CertType::ARK),
+                x if x.contains("sev") => Ok(CertType::ASK),
                 x if x.contains("crl") => Ok(CertType::CRL),
                 _ => Err(anyhow::anyhow!("Unknown certificate type encountered!")),
             }
@@ -342,7 +343,7 @@ mod attestation {
             ProcType::Turin => {
                 let fmc = att_report.reported_tcb.fmc.ok_or_else(|| {
                     anyhow::anyhow!(
-                        "Attestation report TCB FMC is not present in the report. it is expected for a {} model.",
+                        "Attestation report TCB FMC is not present in the report. It is expected for a {} model.",
                         proc_model
                     )
                 })?;
@@ -367,7 +368,7 @@ mod attestation {
             ProcType::Venice => {
                 let fmc = att_report.reported_tcb.fmc.ok_or_else(|| {
                     anyhow::anyhow!(
-                        "Attestation report TCB FMC is not present in the report. it is expected for a {} model.",
+                        "Attestation report TCB FMC is not present in the report. It is expected for a {} model.",
                         proc_model
                     )
                 })?;
@@ -397,7 +398,7 @@ mod attestation {
 
         for (component, oid, value) in checks {
             if let Some(cert_bytes) = extensions.get(&oid) {
-                if !check_cert_bytes(cert_bytes, &value.to_le_bytes()) {
+                if !check_cert_tcb(cert_bytes, value) {
                     return Err(anyhow::anyhow!(
                         "Report TCB {} and Certificate {} mismatch encountered.",
                         component,
@@ -410,13 +411,22 @@ mod attestation {
                         component
                     );
                 }
+            } else {
+                Err(anyhow::anyhow!(
+                    "OID for {} component was not identified on the VCEK.",
+                    component
+                ))?;
             }
         }
 
         // Compare HWID information only on VCEK
         if common_name == CertType::VCEK {
-            if let Some(cert_hwid) = extensions.get(&SnpOid::HwId.oid()) {
-                if !check_cert_bytes(cert_hwid, &att_report.chip_id) {
+            if att_report.chip_id == [0u8; 64] {
+                if !quiet {
+                    println!("Chip ID is all 0s in the attestation report. Skipping the certificate hardware ID check. Confirm that MASK_CHIP_ID is set to 0 if this comparison is required.");
+                }
+            } else if let Some(cert_hwid) = extensions.get(&SnpOid::HwId.oid()) {
+                if !check_cert_hwid(cert_hwid, &att_report.chip_id) {
                     return Err(anyhow::anyhow!(
                         "Report TCB ID and Certificate ID mismatch encountered."
                     ));
@@ -825,7 +835,7 @@ mod attestation {
         }
 
         #[test]
-        fn test_check_cert_bytes_legacy() {
+        fn test_check_cert_hwid_legacy() {
             let (legacy_cert_bytes, val) = cert_and_hw_id_legacy();
 
             let dummy_x509: X509Certificate =
@@ -834,11 +844,11 @@ mod attestation {
 
             let ext = extensions.get(&SnpOid::HwId.oid()).unwrap();
 
-            assert!(check_cert_bytes(ext, &val));
+            assert!(check_cert_hwid(ext, &val));
         }
 
         #[test]
-        fn test_check_cert_bytes() {
+        fn test_check_cert_hwid() {
             let (cert_bytes, val) = cert_and_hw_id();
 
             let dummy_x509: X509Certificate = X509Certificate::from_der(&cert_bytes).unwrap().1;
@@ -846,17 +856,24 @@ mod attestation {
 
             let ext = extensions.get(&SnpOid::HwId.oid()).unwrap();
 
-            assert!(check_cert_bytes(ext, val.as_slice()));
+            assert!(check_cert_hwid(ext, &val));
         }
 
         #[test]
-        fn test_check_cert_bytes_integer() {
+        fn test_check_cert_tcb() {
             let (cert_bytes, _) = cert_and_hw_id();
             let val = 0x1Eu8;
             let dummy_x509: X509Certificate = X509Certificate::from_der(&cert_bytes).unwrap().1;
             let extensions = dummy_x509.extensions_map().unwrap();
             let ext = extensions.get(&SnpOid::Ucode.oid()).unwrap();
-            assert!(check_cert_bytes(ext, &val.to_ne_bytes()));
+            assert!(check_cert_tcb(ext, val));
+        }
+
+        #[test]
+        fn test_check_hwid_untagged_family_1ah() {
+            let mut chip_id = [0u8; 64];
+            chip_id[..8].copy_from_slice(&[0x02, 0x3a, 0x57, 0xc1, 0x64, 0xcc, 0x0e, 0x6e]);
+            assert!(check_hwid_bytes(&chip_id[..8], &chip_id));
         }
     }
 }
