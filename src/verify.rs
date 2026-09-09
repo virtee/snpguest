@@ -338,53 +338,78 @@ mod attestation {
 
         let common_name: CertType = parse_common_name(vek_x509.subject())?;
 
-        // Compare bootloaders
-        if let Some(cert_bl) = extensions.get(&SnpOid::BootLoader.oid()) {
-            if !check_cert_bytes(cert_bl, &att_report.reported_tcb.bootloader.to_le_bytes()) {
-                return Err(anyhow::anyhow!(
-                    "Report TCB Boot Loader and Certificate Boot Loader mismatch encountered."
-                ));
-            }
-            if !quiet {
-                println!(
-                    "Reported TCB Boot Loader from certificate matches the attestation report."
-                );
-            }
-        }
+        let checks = match proc_model {
+            ProcType::Turin => {
+                let fmc = att_report.reported_tcb.fmc.ok_or_else(|| {
+                    anyhow::anyhow!(
+                        "Attestation report TCB FMC is not present in the report. it is expected for a {} model.",
+                        proc_model
+                    )
+                })?;
 
-        // Compare TEE information
-        if let Some(cert_tee) = extensions.get(&SnpOid::Tee.oid()) {
-            if !check_cert_bytes(cert_tee, &att_report.reported_tcb.tee.to_le_bytes()) {
-                return Err(anyhow::anyhow!(
-                    "Report TCB TEE and Certificate TEE mismatch encountered."
-                ));
+                vec![
+                    ("FMC", SnpOid::Fmc.oid(), fmc),
+                    (
+                        "BootLoader",
+                        SnpOid::BootLoader.oid(),
+                        att_report.reported_tcb.bootloader,
+                    ),
+                    ("TEE", SnpOid::Tee.oid(), att_report.reported_tcb.tee),
+                    ("SNP", SnpOid::Snp.oid(), att_report.reported_tcb.snp),
+                    (
+                        "Microcode",
+                        SnpOid::Ucode.oid(),
+                        att_report.reported_tcb.microcode,
+                    ),
+                ]
             }
-            if !quiet {
-                println!("Reported TCB TEE from certificate matches the attestation report.");
-            }
-        }
 
-        // Compare SNP information
-        if let Some(cert_snp) = extensions.get(&SnpOid::Snp.oid()) {
-            if !check_cert_bytes(cert_snp, &att_report.reported_tcb.snp.to_le_bytes()) {
-                return Err(anyhow::anyhow!(
-                    "Report TCB SNP and Certificate SNP mismatch encountered."
-                ));
-            }
-            if !quiet {
-                println!("Reported TCB SNP from certificate matches the attestation report.");
-            }
-        }
+            ProcType::Venice => {
+                let fmc = att_report.reported_tcb.fmc.ok_or_else(|| {
+                    anyhow::anyhow!(
+                        "Attestation report TCB FMC is not present in the report. it is expected for a {} model.",
+                        proc_model
+                    )
+                })?;
 
-        // Compare Microcode information
-        if let Some(cert_ucode) = extensions.get(&SnpOid::Ucode.oid()) {
-            if !check_cert_bytes(cert_ucode, &att_report.reported_tcb.microcode.to_le_bytes()) {
-                return Err(anyhow::anyhow!(
-                    "Report TCB Microcode and Certificate Microcode mismatch encountered."
-                ));
+                vec![
+                    ("FMC", SnpOid::Fmc.oid(), fmc),
+                    ("TEE", SnpOid::Tee.oid(), att_report.reported_tcb.tee),
+                    ("SNP", SnpOid::Snp.oid(), att_report.reported_tcb.snp),
+                ]
             }
-            if !quiet {
-                println!("Reported TCB Microcode from certificate matches the attestation report.");
+
+            _ => vec![
+                (
+                    "Boot Loader",
+                    SnpOid::BootLoader.oid(),
+                    att_report.reported_tcb.bootloader,
+                ),
+                ("TEE", SnpOid::Tee.oid(), att_report.reported_tcb.tee),
+                ("SNP", SnpOid::Snp.oid(), att_report.reported_tcb.snp),
+                (
+                    "Microcode",
+                    SnpOid::Ucode.oid(),
+                    att_report.reported_tcb.microcode,
+                ),
+            ],
+        };
+
+        for (component, oid, value) in checks {
+            if let Some(cert_bytes) = extensions.get(&oid) {
+                if !check_cert_bytes(cert_bytes, &value.to_le_bytes()) {
+                    return Err(anyhow::anyhow!(
+                        "Report TCB {} and Certificate {} mismatch encountered.",
+                        component,
+                        component
+                    ));
+                }
+                if !quiet {
+                    println!(
+                        "Reported TCB {} from certificate matches the attestation report.",
+                        component
+                    );
+                }
             }
         }
 
@@ -398,32 +423,6 @@ mod attestation {
                 }
                 if !quiet {
                     println!("Chip ID from certificate matches the attestation report.");
-                }
-            }
-        }
-
-        if proc_model == ProcType::Turin {
-            if att_report.version < 3 {
-                return Err(anyhow::anyhow!(
-                    "Turin Attestation is not supported in version 2 of the report."
-                ));
-            }
-            if let Some(cert_fmc) = extensions.get(&SnpOid::Fmc.oid()) {
-                let fmc = if let Some(fmc) = att_report.reported_tcb.fmc {
-                    fmc
-                } else {
-                    return Err(anyhow::anyhow!(
-                        "Attestation report TCB FMC is not present in the report. it is expecter for a {} model.", proc_model
-                    ));
-                };
-
-                if !check_cert_bytes(cert_fmc, fmc.to_le_bytes().as_slice()) {
-                    return Err(anyhow::anyhow!(
-                        "Report TCB FMC and Certificate FMC mismatch encountered."
-                    ));
-                }
-                if !quiet {
-                    println!("Reported TCB FMC from certificate matches the attestation report.");
                 }
             }
         }
