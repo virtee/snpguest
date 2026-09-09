@@ -22,11 +22,25 @@ pub fn cmd(cmd: DisplayCmd, quiet: bool) -> Result<()> {
 mod report_display {
     use super::*;
 
+    #[derive(ValueEnum, Clone, Copy, Default)]
+    pub enum ReportOutput {
+        /// Render report in plaintext.
+        #[default]
+        Default,
+
+        /// Render report in json.
+        Json,
+    }
+
     #[derive(Parser)]
     pub struct Args {
         /// Path to attestation report to display.
         #[arg(value_name = "att-report-path", required = true)]
         pub att_report_path: PathBuf,
+
+        /// Controls how the attestation report is rendered.
+        #[arg(short, long, value_enum, default_value_t = ReportOutput::Default)]
+        pub output: ReportOutput,
     }
 
     // Print attestation report in console
@@ -35,7 +49,14 @@ mod report_display {
             .context("Could not open attestation report")?;
 
         if !quiet {
-            println!("{}", att_report);
+            match args.output {
+                ReportOutput::Default => println!("{}", att_report),
+                ReportOutput::Json => {
+                    let json = serde_json::to_string_pretty(&att_report)
+                        .context("Could not serialize attestation report to JSON")?;
+                    println!("{}", json);
+                }
+            }
         };
 
         Ok(())

@@ -77,9 +77,14 @@ snpguest display <SUBCOMMAND>
 
     - `$ATT_REPORT_PATH` : Specifies the path of the stored attestation report to display.
 
+    **Options**
+
+    - `-o, --output <OUTPUT>` : Controls how the attestation report is rendered [default: default] [possible values: default, json].
+
     **Example**
     ```bash
     snpguest display report attestation-report.bin
+    snpguest display report attestation-report.bin --output json
     ```
 
 2. `key`
