@@ -57,6 +57,7 @@ impl FromStr for Endorsement {
         }
     }
 }
+
 #[derive(ValueEnum, Debug, Clone, PartialEq, Eq)]
 pub enum ProcType {
     /// 3rd Gen AMD EPYC Processor (Standard)
@@ -73,6 +74,9 @@ pub enum ProcType {
 
     /// 5th Gen AMD EPYC Processor (Standard)
     Turin,
+
+    /// 6th Gen AMD EPYC Processor (Standard)
+    Venice,
 }
 
 impl ProcType {
@@ -94,6 +98,7 @@ impl FromStr for ProcType {
             "bergamo" => Ok(ProcType::Bergamo),
             "siena" => Ok(ProcType::Siena),
             "turin" => Ok(ProcType::Turin),
+            "venice" => Ok(ProcType::Venice),
             _ => Err(anyhow::anyhow!("Processor type not found!")),
         }
     }
@@ -107,11 +112,13 @@ impl fmt::Display for ProcType {
             ProcType::Bergamo => write!(f, "Bergamo"),
             ProcType::Siena => write!(f, "Siena"),
             ProcType::Turin => write!(f, "Turin"),
+            ProcType::Venice => write!(f, "Venice"),
         }
     }
 }
 
 pub fn get_processor_model(att_report: AttestationReport) -> Result<ProcType> {
+    // Logic still valid since Venice won't have reports < 3
     if att_report.version < 3 {
         if [0u8; 64] == att_report.chip_id {
             return Err(anyhow::anyhow!(
@@ -145,6 +152,7 @@ pub fn get_processor_model(att_report: AttestationReport) -> Result<ProcType> {
         },
         0x1A => match cpu_mod {
             0x0..=0x11 => Ok(ProcType::Turin),
+            0x50..=0x57 | 0x90..=0x9F | 0xA0..=0xAF | 0xC0..=0xC7 => Ok(ProcType::Venice),
             _ => Err(anyhow::anyhow!("Processor model not supported")),
         },
         _ => Err(anyhow::anyhow!("Processor family not supported")),
@@ -315,7 +323,7 @@ mod vcek {
         // Get hardware id
         let hw_id: String = if att_report.chip_id.as_bytes() != [0; 64] {
             match processor_model {
-                ProcType::Turin => {
+                ProcType::Turin | ProcType::Venice => {
                     let shorter_bytes: &[u8] = &att_report.chip_id[0..8];
                     hex::encode(shorter_bytes)
                 }
@@ -344,6 +352,22 @@ mod vcek {
                     att_report.reported_tcb.tee,
                     att_report.reported_tcb.snp,
                     att_report.reported_tcb.microcode
+                )
+            }
+
+            ProcType::Venice => {
+                let fmc = if let Some(fmc) = att_report.reported_tcb.fmc {
+                    fmc
+                } else {
+                    return Err(anyhow::anyhow!("A Venice processor must have a fmc value"));
+                };
+                format!(
+                    "{KDS_CERT_SITE}{KDS_VCEK}/{}/\
+                    {hw_id}?fmcSPL={:02}&teeSPL={:02}&snpSPL={:02}",
+                    processor_model.to_kds_url(),
+                    fmc,
+                    att_report.reported_tcb.tee,
+                    att_report.reported_tcb.snp
                 )
             }
             _ => {
@@ -563,6 +587,18 @@ mod tests {
         };
         let proc_model = get_processor_model(att_report).unwrap();
         assert_eq!(proc_model, ProcType::Turin);
+    }
+
+    #[test]
+    fn test_get_processor_model_venice() {
+        let att_report = AttestationReport {
+            version: 3,
+            cpuid_fam_id: Some(0x1A),
+            cpuid_mod_id: Some(0x50),
+            ..Default::default()
+        };
+        let proc_model = get_processor_model(att_report).unwrap();
+        assert_eq!(proc_model, ProcType::Venice);
     }
 
     #[test]
