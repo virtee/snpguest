@@ -254,9 +254,13 @@ snpguest key derived-key.bin vcek --guest_field_select 0b110001 --guest_svn 2 --
 
 Requests an attestation report from the host and writes it to a file with the provided request data and VMPL. The attestation report is written in binary format to the specified report path. The user can pass 64 bytes of data in any file format into `$REQUEST_FILE` to request the attestation report. This data will be bound to the REPORT_DATA field of the attestation report. The `--random` flag can be used to generate and use random data for the request, which will be written into `$REQUEST_FILE`. On a Confidential VM with the OpenHCL paravisor, use `--openhcl` to request a fresh attestation report through the vTPM. The 64 bytes read from `$REQUEST_FILE`, or generated with `--random`, are supplied to OpenHCL as the report request data. When `--openhcl` is used, `--vmpl` is ignored and the paravisor requests the report at VMPL 0. `VMPL` otherwise defaults to 1.
 
+For guests running under an SVSM, use `--service-provider svsm --manifest-path $MANIFEST_PATH`. This requests attestation for all active SVSM services through the [Linux configfs TSM report interface](https://github.com/torvalds/linux/blob/master/Documentation/ABI/testing/configfs-tsm-report), saving `outblob` to `$ATT_REPORT_PATH` and the raw `manifestblob` to a separate binary file at `$MANIFEST_PATH`. Both options must be supplied together, and the manifest path must differ from the report and request paths. The report format remains compatible with `display report` and report signature verification. SVSM uses the 64-byte request data as a nonce in its attestation protocol; the resulting `REPORT_DATA` is derived by SVSM and is not simply a copy of that nonce. `--vmpl` is ignored because SVSM requests reports at VMPL 0. This mode cannot be combined with `--openhcl`.
+
+SVSM attestation requires a supporting kernel (the configfs SVSM attributes were introduced in Linux 6.10), the `sev_guest` TSM provider, and configfs mounted at `/sys/kernel/config`. Run with permission to create and access report instances under `/sys/kernel/config/tsm/report` (typically as root). Each request creates a unique instance and removes it after reading the blobs, including on request failure. A missing or unreadable manifest is an error; an empty manifest is saved as an empty file if returned by the provider. Existing output files are overwritten.
+
 **Usage**
 ```bash
-snpguest report $ATT_REPORT_PATH $REQUEST_FILE [-v, --vmpl] [-r, --random] [--openhcl]
+snpguest report $ATT_REPORT_PATH $REQUEST_FILE [-v, --vmpl] [-r, --random] [--openhcl | --service-provider svsm --manifest-path $MANIFEST_PATH]
 ```
 
 **Arguments**
@@ -264,9 +268,11 @@ snpguest report $ATT_REPORT_PATH $REQUEST_FILE [-v, --vmpl] [-r, --random] [--op
 | :--      | :--        | :--    |
 | `$ATT_REPORT_PATH` | Specifies the path where the attestation report would be stored. | required |
 | `$REQUEST_FILE` | Specifies the path to the 64-byte request file. Its contents are used as the report request data. With `--random`, 64 random bytes are generated, written to this file, and used instead. | required |
-| `-v, --vmpl $VMPL` | Specifies the VMPL level the Guest is running on. Ignored with `--openhcl`, which requests the report at VMPL 0. | 1 |
+| `-v, --vmpl $VMPL` | Specifies the VMPL level the Guest is running on. Ignored with `--openhcl` or `--service-provider svsm`, which request the report at VMPL 0. | 1 |
 | `-r, --random` | Generate 64 random bytes of data for the report request and write them to `$REQUEST_FILE`. | false |
 | `--openhcl` | Request a fresh attestation report through the OpenHCL paravisor (only available on supported Confidential VMs with a binary built with the `hyperv` feature). | false |
+| `--service-provider svsm` | Request an SVSM report and service manifest through configfs TSM. Requires `--manifest-path`; conflicts with `--openhcl`. | unset |
+| `--manifest-path $MANIFEST_PATH` | File to write the raw binary SVSM manifest blob to. Requires `--service-provider svsm`. | unset |
 
 **Example**
 ```bash
@@ -276,6 +282,8 @@ snpguest report attestation-report.bin request-file.bin
 snpguest report attestation-report.bin random-request-file.bin --random
 # Requesting a fresh Attestation Report through OpenHCL with user-generated data
 snpguest report attestation-report.bin request-file.bin --openhcl
+# Requesting an SVSM report and manifest using a random nonce
+snpguest report attestation-report.bin request-file.bin --random --service-provider svsm --manifest-path manifest.bin
 ```
 
 ### 7. `verify` 

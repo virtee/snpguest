@@ -26,7 +26,7 @@ GLOBAL OPTIONS
 COMMANDS
 --------
 *snpguest report*::
-    usage: snpguest report $ATT_REPORT_PATH $REQUEST_FILE [-v, --vmpl] $VMPL [-r, --random] [-p, --platform]
+    usage: snpguest report $ATT_REPORT_PATH $REQUEST_FILE [-v, --vmpl] $VMPL [-r, --random] [-p, --platform] [--service-provider svsm --manifest-path $MANIFEST_PATH]
 
     Requests an attestation report from the host and writes it in a file with the provided request data and vmpl.
     Will write the contents of the attestation report in binary format into the specified report path.
@@ -42,12 +42,21 @@ COMMANDS
     request data for the attestation report.
     The pre-generated data will be taken from the platform attestation report and then written in raw byte format into $REQUEST_FILE.
     VMPL is an optional parameter and it defaults to 1.
+    With --service-provider svsm, request attestation for all active SVSM services through configfs TSM.
+    The raw outblob is saved to $ATT_REPORT_PATH and manifestblob is saved separately to the required --manifest-path.
+    The manifest path must differ from the report and request paths. Existing output files are overwritten.
+    The 64-byte request data is used as an SVSM nonce; REPORT_DATA is derived by SVSM rather than copied from the nonce.
+    SVSM requests reports at VMPL 0, so --vmpl is ignored. This mode conflicts with --openhcl.
+    Requires SVSM attestation support in the kernel (configfs attributes introduced in Linux 6.10), the sev_guest TSM
+    provider, configfs mounted at /sys/kernel/config, and permission to create report instances (typically root).
 
     options:
     -h, --help  show a help message.
     -p, --platform Use platform generated 64 bytes of data to pass for the report request (Only available for Hyper-V).
     -r, --random  Generate 64 random bytes of data to pass for the report request (Not available for Hyper-V).
     -v, --vmpl Specify a different vmpl level for the attestation report (defaults to 1).
+    --service-provider svsm Request an SVSM report through configfs TSM; requires --manifest-path.
+    --manifest-path $MANIFEST_PATH Save the raw binary SVSM manifest; requires --service-provider svsm.
 
 *snpguest certificates*::
     usage: snpguest certificates $ENCODING $CERTS_DIR
