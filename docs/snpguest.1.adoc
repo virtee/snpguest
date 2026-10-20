@@ -26,7 +26,7 @@ GLOBAL OPTIONS
 COMMANDS
 --------
 *snpguest report*::
-    usage: snpguest report $ATT_REPORT_PATH $REQUEST_FILE [-v, --vmpl] $VMPL [-r, --random] [-p, --platform] [--service-provider svsm --manifest-path $MANIFEST_PATH]
+    usage: snpguest report $ATT_REPORT_PATH $REQUEST_FILE [-v, --vmpl] $VMPL [-r, --random] [-p, --platform] [--service-provider $SERVICE_PROVIDER --manifest-path $MANIFEST_PATH]
 
     Requests an attestation report from the host and writes it in a file with the provided request data and vmpl.
     Will write the contents of the attestation report in binary format into the specified report path.
