@@ -105,7 +105,12 @@ pub fn get_report(args: ReportArgs, hyperv_present: bool) -> Result<()> {
          * Read from the request file.
          */
         let mut bytes = [0u8; 64];
-        let mut file = File::open(&args.request_file)?;
+        let mut file = File::open(&args.request_file).with_context(|| {
+            format!(
+                "unable to open request file: {}",
+                args.request_file.display()
+            )
+        })?;
         file.read_exact(&mut bytes)
             .context("unable to read 64 bytes from REQUEST_FILE")?;
 
