@@ -353,14 +353,22 @@ mod attestation {
                     (
                         "BootLoader",
                         SnpOid::BootLoader.oid(),
-                        att_report.reported_tcb.bootloader,
+                        att_report.reported_tcb.bootloader.with_context(|| {
+                            format!(
+                                "Attestation report TCB BootLoader is not present in the report. It is expected for a {proc_model} model."
+                            )
+                        })?,
                     ),
                     ("TEE", SnpOid::Tee.oid(), att_report.reported_tcb.tee),
                     ("SNP", SnpOid::Snp.oid(), att_report.reported_tcb.snp),
                     (
                         "Microcode",
                         SnpOid::Ucode.oid(),
-                        att_report.reported_tcb.microcode,
+                        att_report.reported_tcb.microcode.with_context(|| {
+                            format!(
+                                "Attestation report TCB Microcode is not present in the report. It is expected for a {proc_model} model."
+                            )
+                        })?,
                     ),
                 ]
             }
@@ -384,14 +392,22 @@ mod attestation {
                 (
                     "Boot Loader",
                     SnpOid::BootLoader.oid(),
-                    att_report.reported_tcb.bootloader,
+                    att_report.reported_tcb.bootloader.with_context(|| {
+                        format!(
+                            "Attestation report TCB BootLoader is not present in the report. It is expected for a {proc_model} model."
+                        )
+                    })?,
                 ),
                 ("TEE", SnpOid::Tee.oid(), att_report.reported_tcb.tee),
                 ("SNP", SnpOid::Snp.oid(), att_report.reported_tcb.snp),
                 (
                     "Microcode",
                     SnpOid::Ucode.oid(),
-                    att_report.reported_tcb.microcode,
+                    att_report.reported_tcb.microcode.with_context(|| {
+                        format!(
+                            "Attestation report TCB Microcode is not present in the report. It is expected for a {proc_model} model."
+                        )
+                    })?,
                 ),
             ],
         };

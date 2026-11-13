@@ -349,10 +349,16 @@ mod vcek {
                     {hw_id}?fmcSPL={:02}&blSPL={:02}&teeSPL={:02}&snpSPL={:02}&ucodeSPL={:02}",
                     processor_model.to_kds_url(),
                     fmc,
-                    att_report.reported_tcb.bootloader,
+                    att_report
+                        .reported_tcb
+                        .bootloader
+                        .context("A Turin processor must have a bootloader value")?,
                     att_report.reported_tcb.tee,
                     att_report.reported_tcb.snp,
-                    att_report.reported_tcb.microcode
+                    att_report
+                        .reported_tcb
+                        .microcode
+                        .context("A Turin processor must have a microcode value")?
                 )
             }
 
@@ -376,10 +382,14 @@ mod vcek {
                     "{KDS_CERT_SITE}{KDS_VCEK}/{}/\
                     {hw_id}?blSPL={:02}&teeSPL={:02}&snpSPL={:02}&ucodeSPL={:02}",
                     processor_model.to_kds_url(),
-                    att_report.reported_tcb.bootloader,
+                    att_report.reported_tcb.bootloader.with_context(|| format!(
+                        "A {processor_model} processor must have a bootloader value"
+                    ))?,
                     att_report.reported_tcb.tee,
                     att_report.reported_tcb.snp,
-                    att_report.reported_tcb.microcode
+                    att_report.reported_tcb.microcode.with_context(|| format!(
+                        "A {processor_model} processor must have a microcode value"
+                    ))?
                 )
             }
         };
