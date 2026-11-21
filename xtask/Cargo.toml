@@ -1,0 +1,13 @@
+[package]
+name = "xtask"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.86"
+license = "Apache-2.0"
+publish = false
+
+[dependencies]
+clap = { version = "4.5", features = ["derive"] }
+clap_mangen = "0.3.3"
+snpguest = { path = ".." }
+tempfile = "3"

@@ -1,3 +1,7 @@
+[workspace]
+members = ["xtask"]
+resolver = "2"
+
 [package]
 name = "snpguest"
 version = "0.11.0"
@@ -12,6 +16,13 @@ exclude = [ ".gitignore", ".github/*" ]
 rust-version = "1.86"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[lib]
+doc = false
+
+[[bin]]
+name = "snpguest"
+path = "src/main.rs"
 
 [features]
 default = []
