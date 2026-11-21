@@ -1,0 +1,36 @@
+name: Documentation
+
+on: [push, pull_request]
+
+permissions:
+  contents: read
+
+jobs:
+  rdme:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: stable
+      - run: cargo install cargo-rdme --version 1.5.0 --locked
+      - run: cargo rdme --check
+
+  rustdoc:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: stable
+      - run: cargo doc --no-deps
+
+  manpages:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: stable
+      - run: cargo xtask manpages
